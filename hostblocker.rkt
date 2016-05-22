@@ -97,11 +97,40 @@
          (read-body hf (populate-source hf src-hash srcs))]
         [else (read-body hf srcs)]))
 
+
+;; (list-sources) -> (void)
+;; requires:
+;;    parameters: (hostsfile-path)
+;; side-effects:
+;;   output the sources listed in the cookie section
+;;   of the hostsfile
+(define (list-sources)
+  (define hostsfile (open-input-file (hostsfile-path)))
+  (define sources (read-cookie hostsfile))
+  (displayln (string-append "sources for hostfile " (hostsfile-path) ":"))
+  (void (hash-for-each sources (λ (k v) (displayln (string-append "  " k))))))
+
+;; (list-entries source) -> (void)
+;; requires:
+;;   parameters: (hostsfile-path)
+;; side-effects:
+;;   output the entries for a given source `source`
+(define (list-entries source)
+  (define hostsfile (open-input-file (hostsfile-path)))
+  (define sources (read-cookie hostsfile))
+  (define popped-sources (read-body hostsfile sources))
+  (define source-hash (hash-ref popped-sources source (λ () (error "ERROR:"))))
+  (displayln (string-append "entries for source " source ":"))
+  (void (hash-for-each  source-hash (λ (k v) (displayln (string-append "  " k))))))
+
+
 (define (main)
   (define hostsfile (open-input-file (hostsfile-path)))
   (define sources (read-cookie hostsfile))
   (define popped-sources (read-body hostsfile sources))
-  (pretty-print popped-sources))
+  (cond [(not (equal? (remote-src) ""))
+         (void (map displayln (get-remote-hostsfile (remote-src))))]
+        [else (void)]))
 
 
 (define hostsfile-path (make-parameter "/etc/hosts"))
@@ -112,6 +141,11 @@
   (command-line
    #:program "hostblocker"
    #:once-each
+   [("-l" "--list") "list known sources in the hostfile specified"
+                    (list-sources)]
+   [("-e" "--entries") source
+                       "list entries of a source: <source>"
+                       (list-entries source)]
    [("-f" "--file") filename
                     "specify hosts file: <filename>"
                     (hostsfile-path filename)]
