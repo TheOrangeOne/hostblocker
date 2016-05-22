@@ -1,23 +1,18 @@
-#! begin hostblocker cookie
+#! begin cookie
 #! src: http://adaway.org/hosts.txt
 #! src: /home/kyle/downloads/hosts
-#! end hostblocker cookie
+#! end cookie
 
-#! begin ignore
 127.0.0.1   localhost.localdomain   localhost   orange
-#! end ignore
 
-#! begin src: http://adaway.org/hosts.txt
-.
-.
-.
+#! src: http://adaway.org/hosts.txt
+0.0.0.0 ad-g.doubleclick.net           #! ad crap
+0.0.0.0 adsense.com                    #! ad
 #! end src
 
-
-#! begin src: /home/kyle/downloads/hosts
-.
-.
-.
+#! src: /home/kyle/downloads/hosts
+0.0.0.0 facebook.com                   #! social crap
+0.0.0.0 twitter.com                    #! social
+0.0.0.0 reddit.com                     #! productivity
+0.0.0.0 youtube.com                    #! productivity
 #! end src
-
-0.0.0.0 facebook.com
