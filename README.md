@@ -16,3 +16,8 @@ block websites and ads efficiently and absolutely using hosts file
 - `-de` disable entry/host
 - add optional default sources
 - clean up code and write documentation cause watching game of thrones and programming does not result in clean code
+
+
+# Testing
+to run tests
+```$ racket tests.rkt```

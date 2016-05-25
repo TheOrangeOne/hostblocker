@@ -1,8 +1,3 @@
-#! begin cookie
-#! src: http://adaway.org/hosts.txt
-#! src: /home/kyle/downloads/hosts
-#! end cookie
-
 127.0.0.1   localhost.localdomain   localhost   orange
 
 #! src: http://adaway.org/hosts.txt
