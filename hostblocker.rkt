@@ -1,44 +1,35 @@
 #lang racket
 
 (require
+ "lib.rkt"
  racket/cmdline
  net/http-client
  net/head
  net/url
  rackunit)
 
-(error-print-context-length 0) ;; prevent stacktrace
-
-
 (provide (all-defined-out))
 
 
-;; TODO: document or clean up
+;; prevent stacktrace on error messages
+(error-print-context-length 0)
+
+
+;; (log line) -> void?
+;;   line: string?
+;; requires:
+;;   parameters: (logging)
+;;
+;; if logging is enabled (equal? (logging) #t)
+;; then output the given string `line`
 (define (log line)
   (if (logging) (displayln line) (void)))
 
 
-(define (string-empty? s)
-  (string=? "" s))
-
-
-(define (error-text msg)
-  (format "ERROR: ~a" msg))
-
-
-;; (pip->lost pipe) -> (listof string)
-;; convert an input pipe to a list of string
-;; TODO: document or clean up
-(define (pipe->los pipe)
-  (define line (read-line pipe))
-  (if (eof-object? line)
-      empty
-      (cons line (pipe->los pipe))))
-
-
 ;; (fetch-hostsfile url) -> (input-pipe)
+;;   url: string?
+;;
 ;; GET hostsfile located at url
-;; TODO: document or clean up
 (define (get-remote-hostsfile url)
   (with-handlers
     ([(λ (x) #t)
@@ -72,10 +63,6 @@
 (define (parse-hostsfile file)
   (define los (pipe->los file))
   (void (map displayln los)))
-
-
-;; http://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url
-(define url-regex #px"(http(s)?:\\/\\/.)?(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{2,256}\\.[a-z]{2,6}([-a-zA-Z0-9@:%_\\+.~#?&//=]*)")
 
 
 ;; TODO: document or clean up

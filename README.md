@@ -2,16 +2,17 @@
 block websites and ads efficiently and absolutely using hosts file
 
 # TODO
-- `-a` add source from remote or local
+- `-a` add source from remote or local [x]
 - `-u` updating from sources
 - `-d` fetch default sources from github or something
-- `-g` list by group / add groups hashtable
+- `-t` list by tag / add tags hashtable
+- `-l` list sources in hostsfile (categorize by local or remote)
 - `-o` output to hostfile
 - `-v` print version
 - `-r` remove source
-- `-rg` remove group
-- `-eg` enable group
-- `-dg` disable group
+- `-rt` remove by tag
+- `-et` enable tag (uncomment line)
+- `-dt` disable tag (comment line)
 - `-ee` enable entry/host
 - `-de` disable entry/host
 - add optional default sources
@@ -20,4 +21,5 @@ block websites and ads efficiently and absolutely using hosts file
 
 # Testing
 to run tests
+
 ```$ racket tests.rkt```
