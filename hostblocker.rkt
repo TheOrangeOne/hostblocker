@@ -15,6 +15,28 @@
 (error-print-context-length 0)
 
 
+;; define a hostsfile as the following:
+;;   entries: (listof (anyof string? hash?))
+;;   srcs-hash: hash?
+;;
+;; we wish to maintain the ordering of entries and source
+;; blocks within the hostsfile in case there are manually
+;; added entries which the user would not like us to mess with
+;;
+;; string? elements in `entries` represent raw lines from the
+;; hostsfile not contained within #! source blocks
+;;
+;; hash? elements in `entries` represent sources
+;;
+;; srcs-hash is a hash containing all the sources
+;; as keys with the values also being a hash with keys
+;; being all of the entries for a source and the value
+;; for each entry being a list of strings for the tags
+;; of the entry
+(define-struct (hostsfile entries srcs-hash))
+
+
+
 ;; (log line) -> void?
 ;;   line: string?
 ;; requires:
