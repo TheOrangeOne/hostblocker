@@ -97,23 +97,43 @@
 
 ;; TODO: document or clean up
 (define (add-source newsrc sources)
-  (cond [(not (string=? newsrc ""))
-         (if (hash-has-key? sources newsrc)
-             (error (error-text (format "source '~a' already exists" newsrc)))
-             (void))
-         (define newsrc-pipe (read-source newsrc))
-         (hash-set! sources newsrc (generate-entries newsrc-pipe sources))
-         (void)]
-        [else (void)]))
+  (if (hash-has-key? sources newsrc)
+      (error (error-text (format "source '~a' already exists" newsrc)))
+      (void))
+  (define newsrc-pipe (read-source newsrc))
+  (hash-set! sources newsrc (generate-entries newsrc-pipe sources))
+  (void))
 
 
-;; TODO: document or clean up
+;; (get-line k v) -> string?
+;;   k: string?
+;;   v: (listof string?)
+;;
+;; returns a line/entry for hostsfile given the
+;; host `k` and the tags for the host `v`
+;; eg:
+;; (get-line "facebook.com" '("crap" "bad")) -> "0.0.0.0 facebook.com #! crap bad"
+(define (get-line k v)
+  (format "0.0.0.0 ~a  #!~a~a~n" k (if (empty? v) "" " ") (string-join v)))
+
+
+;; (write-hostsfile newsrc sources out) -> void?
+;;   newsrc: string?
+;;   sources: hash?
+;;   out: output-port?
+;;
+;; if there is a new source `newsrc` specified append
+;; the entries contained in `sources` for `newsrc` to
+;; the file specified by `out`
 (define (write-hostsfile newsrc sources out)
-  (cond [(not (string=? newsrc ""))
-         (fprintf out "~n")
-         (fprintf out (string-append "#! src: " newsrc "~n"))
-         (fprintf out "#! end src~n")]
-        [else (void)]))
+  (cond
+    [(string-empty? newsrc) (void)]
+    [else
+     (define newsrc-hash (hash-ref sources newsrc))
+     (fprintf out "~n")
+     (fprintf out (format "#! src: ~a~n" newsrc))
+     (hash-map newsrc-hash (λ (k v) (fprintf out (get-line k v))))
+     (fprintf out "#! end src~n")]))
 
 
 ;; (list-entries src srcs-hash) -> (void)
@@ -281,10 +301,11 @@
       (void) (add-source (new-source) sources))
   (if (list-sources?) (list-sources sources) (void))
   (if (string-empty? (source-to-list))
-      (void) (list-entries (source-to-list) sources)))
-  ;(define hostsfile-out (open-output-file (hostsfile-out-path) #:exists 'append))
-  ;(write-hostsfile (new-source) sources hostsfile-out)
-  ;(close-output-port hostsfile-out))
+      (void) (list-entries (source-to-list) sources))
+
+  (define hostsfile-out (open-output-file (hostsfile-out-path) #:exists 'append))
+  (write-hostsfile (new-source) sources hostsfile-out)
+  (close-output-port hostsfile-out))
 
 
 
@@ -340,7 +361,8 @@
     (source-to-list source)]
    [("-f" "--file") filename
     "specify hosts file: <filename>"
-    (hostsfile-path filename)]
+    (hostsfile-path filename)
+    (hostsfile-out-path (hostsfile-path))]
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
