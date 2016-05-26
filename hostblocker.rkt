@@ -18,6 +18,14 @@
   (if (logging) (displayln line) (void)))
 
 
+(define (string-empty? s)
+  (string=? "" s))
+
+
+(define (error-text msg)
+  (format "ERROR: ~a" msg))
+
+
 ;; (pip->lost pipe) -> (listof string)
 ;; convert an input pipe to a list of string
 ;; TODO: document or clean up
@@ -34,7 +42,7 @@
 (define (get-remote-hostsfile url)
   (with-handlers
     ([(λ (x) #t)
-      (λ (x) (error (string-append "ERROR: could not connect to " url)))])
+      (λ (x) (error (error-text (format "could not connect to ~a" url))))])
     (define-values (status header resp)
       (http-sendrecv/url (string->url url) #:method "GET"))
     resp))
@@ -44,28 +52,20 @@
 ;; GET hostsfile located at url
 ;; TODO: document or clean up
 (define (get-remote-hostsfile-los url)
-  (with-handlers
-    ([(λ (x) #t)
-      (λ (x) (error (string-append "ERROR: could not connect to " url)))])
-    (define-values (status header resp)
-      (http-sendrecv/url (string->url url) #:method "GET"))
-    (pipe->los resp)))
+  (pipe->los (get-remote-hostsfile url)))
 
 
 ;; TODO: document or clean up
 (define (get-local-hostsfile path)
   (with-handlers
     ([(λ (x) #t)
-      (λ (x) (error (string-append "ERROR: could not open or find file " path)))])
+      (λ (x) (error (error-text (format "could not open or find file '~a'" path))))])
     (open-input-file path)))
 
 
 ;; TODO: document or clean up
 (define (get-local-hostsfile-los path)
-  (with-handlers
-    ([(λ (x) #t)
-      (λ (x) (error (string-append "ERROR: could not open or find file " path)))])
-    (pipe->los (open-input-file path))))
+  (pipe->los (get-local-hostsfile path)))
 
 
 ;; TODO: document or clean up
@@ -99,7 +99,7 @@
 (define (add-source newsrc sources)
   (cond [(not (string=? newsrc ""))
          (if (hash-has-key? sources newsrc)
-             (error "ERROR: source already exists")  ; TODO add prompt to overwrite
+             (error (error-text (format "source '~a' already exists" newsrc)))
              (void))
          (define newsrc-pipe (read-source newsrc))
          (hash-set! sources newsrc (generate-entries newsrc-pipe sources))
@@ -125,8 +125,9 @@
 ;; side-effects:
 ;;   output the entries for a given source hash `srcs-hash`
 (define (list-entries src srcs-hash)
-  (displayln (string-append "entries for source " src ":"))
-  (void (map (λ (x) (displayln (string-append "  "x))) (get-entries src srcs-hash))))
+  (define entries (get-entries src srcs-hash))
+  (displayln (format "entries for source ~a:" src))
+  (void (map (λ (x) (displayln (format  "  ~a" x))) entries)))
 
 
 ;; (get-entries src srcs-hash) -> (listof string?)
@@ -138,9 +139,11 @@
 ;;
 ;; return the entries for a given source `src`
 (define (get-entries src srcs-hash)
+  (define errtxt
+    (error-text (format "source '~a' not found in ~a" src (hostsfile-path))))
   (define source-hash
     (hash-ref srcs-hash src
-              (λ () (error (string-append "ERROR: source not found in " (hostsfile-path))))))
+              (λ () (error errtxt))))
   (hash-map source-hash (λ (k v) k)))
 
 
@@ -152,8 +155,9 @@
 ;; side-effects:
 ;;   print out the sources given the sources hash
 (define (list-sources srcs-hash)
-  (displayln (string-append "sources for hostfile " (hostsfile-path) ":"))
-  (void (map (λ (x) (displayln (string-append "  "x))) (get-sources srcs-hash))))
+  (define sources (get-sources srcs-hash))
+  (displayln (format "sources for hostfile ~a:" (hostsfile-path)))
+  (void (map (λ (x) (displayln (format  "  ~a" x))) sources)))
 
 
 ;; (get-sources srcs-hash) -> (listof string?)
@@ -211,7 +215,7 @@
 ;; generates/populates the entries for a source
 (define (populate-source los srcs-hash src-hash)
   (cond [(empty? los)
-         (error "ERROR: expected to read #! end src got EOF")]
+         (error (error-text "expected to read '#! end src' got EOF"))]
         [(string=? (first los) "#! end src")
          (generate-sources (rest los) srcs-hash)]
         [(is-entry? (first los))
@@ -272,10 +276,12 @@
   (define hostsfile-los (pipe->los hostsfile))
   (close-input-port hostsfile)
   (define sources (generate-sources hostsfile-los))
+
+  (if (string-empty? (new-source))
+      (void) (add-source (new-source) sources))
   (if (list-sources?) (list-sources sources) (void))
-  (if (not (string=? "" (source-to-list)))
-      (list-entries (source-to-list) sources) (void)))
-  ;(add-source (new-source) sources)
+  (if (string-empty? (source-to-list))
+      (void) (list-entries (source-to-list) sources)))
   ;(define hostsfile-out (open-output-file (hostsfile-out-path) #:exists 'append))
   ;(write-hostsfile (new-source) sources hostsfile-out)
   ;(close-output-port hostsfile-out))
