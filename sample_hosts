@@ -1,3 +1,4 @@
+# a sample hosts file managed by hostblocker
 127.0.0.1   localhost.localdomain   localhost   orange
 
 #! src: http://adaway.org/hosts.txt

@@ -11,29 +11,109 @@
 (provide (all-defined-out))
 
 
-;; prevent stacktrace on error messages
+;; prevent stacktrace on error messages -- comment-out when developing!
 (error-print-context-length 0)
 
 
 ;; define a hostsfile as the following:
 ;;   entries: (listof (anyof string? hash?))
-;;   srcs-hash: hash?
+;;   srcs: hash?
+;;   tags: hash?
 ;;
 ;; we wish to maintain the ordering of entries and source
 ;; blocks within the hostsfile in case there are manually
 ;; added entries which the user would not like us to mess with
 ;;
-;; string? elements in `entries` represent raw lines from the
-;; hostsfile not contained within #! source blocks
+;; string? elements in `entries` represent raw lines from
+;; the hostsfile not contained within #! source blocks
 ;;
 ;; hash? elements in `entries` represent sources
 ;;
-;; srcs-hash is a hash containing all the sources
+;; `srcs` is a hash containing all the sources
 ;; as keys with the values also being a hash with keys
 ;; being all of the entries for a source and the value
 ;; for each entry being a list of strings for the tags
 ;; of the entry
-(define-struct (hostsfile entries srcs-hash))
+;;
+;; `tags` is a hash containing all the entries' tags
+;; the keys being the tag (string?) the values
+;; being a list of string, the entries possessing
+;; the tag
+(define-struct hostsfile (entries sources tags orig))
+
+
+(define (make-empty-hostsfile)
+  (make-hostsfile '() (make-hash) (make-hash) '()))
+
+(define (hostsfile-values hf)
+  (values (hostsfile-entries hf)
+          (hostsfile-sources hf)
+          (hostsfile-tags hf)
+          (hostsfile-orig hf)))
+
+
+(define (add-tag-entry src tag-hash tag)
+  (cond [(hash-has-key? tag-hash tag)
+         (define vals (hash-ref tag-hash tag))
+         (hash-set! tag-hash tag (cons src vals))]
+        [else
+         (hash-set! tag-hash tag (list src))]))
+
+
+(define (hostsfile-add-entry hf val)
+  (define-values (ents srcs tags orig) (hostsfile-values hf))
+  (make-hostsfile (cons val ents) srcs tags (if (hash? val) orig (cons val orig))))
+
+
+(define (hostsfile-add-source-entry hf src entry)
+  (define-values (ents srcs tags orig) (hostsfile-values hf))
+  (define src-hash (hash-ref srcs src))
+  (add-source-entry src-hash entry)
+  (define entry-tags (get-tags entry))
+  (map (curry (curry add-tag-entry src) tags) entry-tags)
+  (make-hostsfile ents srcs tags (cons entry orig)))
+
+
+;; (hostsfile-add-source-in hf src in) -> (hostsfile-parse ...)
+;;   hf: hostsfile?
+;;   src: string?
+;;   in: input-port?
+;;
+;; note: mutually recursive with (hostsfile-parse ...)
+;; assuming the "#! src: `src`" line has been read, read input from `in`
+;; populating `src` with entries until the line "#! end src" is read
+(define (hostsfile-add-source-in hf src in)
+  (define line (read-line in))
+  (cond
+    [(eof-object? in)
+     (error (error-text "expected to read '#! end src' got EOF"))]
+    [(string=? line "#! end src")
+     ;; at this point we just want to add the new sources
+     ;; hash to the entries list
+     (hostsfile-parse
+      in (hostsfile-add-entry hf (hash-ref (hostsfile-sources hf) src)))]
+    [else
+     ;; we want to add the line to the sources hash
+     ;; as well as add any tags the entry has
+     (hostsfile-add-source-in
+      (hostsfile-add-source-entry hf src line) src in)]))
+
+
+;; (parse in hf) -> hostsfile?
+;;   in: input-port?
+;;   hf: hostsfile?
+;;
+;; given an input port produce a hostfile
+(define (hostsfile-parse in [hf (make-empty-hostsfile)])
+  (define line (read-line in))
+  (cond
+    [(eof-object? line) hf]
+    [(is-line-source? line)
+     (define src (get-source line))
+     (hash-set! (hostsfile-sources hf) src (make-hash))
+     (hostsfile-parse in (hostsfile-add-source-in hf src in))]
+    [else
+     (hostsfile-parse in (hostsfile-add-entry hf line))]))
 
 
 
@@ -42,8 +122,8 @@
 ;; requires:
 ;;   parameters: (logging)
 ;;
-;; if logging is enabled (equal? (logging) #t)
-;; then output the given string `line`
+;; if logging is enabled (equal? (logging) #t) then output the given
+;; string `line`
 (define (log line)
   (if (logging) (displayln line) (void)))
 
@@ -99,7 +179,7 @@
   (define line (read-line newsrc-pipe))
   (cond [(eof-object? line) entries]
         [(is-entry? line)
-         (add-entry entries line)
+         (add-source-entry entries line)
          (generate-entries newsrc-pipe sources entries)]
         [else (generate-entries newsrc-pipe sources entries)]))
 
@@ -197,27 +277,29 @@
   (hash-map srcs-hash (λ (k v) k)))
 
 
-;; (get-tags split-line) -> (listof string?)
-;;   split-line: (listof string?)
+;; (get-tags line) -> (listof string?)
+;;   line: (or string? (listof string?))
 ;;
 ;; return the tags of a line, that is, the values
 ;; following the entry, prefaced with #!
 ;; eg the tags for the entry
 ;;    0.0.0.0 facebook.com     #! badness terrible time-wasting
 ;; are '("badness" "terrible" "time-wasting")
-(define (get-tags split-line)
+(define (get-tags line)
+  (define split-line
+    (if (string? line) (string-split line) line))
   (if (and (> (length split-line) 2) (string=? (third split-line) "#!"))
       (rest (rest (rest split-line)))
       '()))
 
 
-;; (add-entry src-hash line) -> (void)
+;; (add-source-entry src-hash line) -> (void)
 ;;   src-hash: hash?
 ;;   line: string?
 ;;
 ;; requires: (is-entry? line)
 ;; side-effect: adds entry to src-hash
-(define (add-entry src-hash line)
+(define (add-source-entry src-hash line)
   (define split-line (string-split line))
   (define entry (second split-line))
   (hash-set! src-hash entry (get-tags split-line)))
@@ -248,7 +330,7 @@
         [(string=? (first los) "#! end src")
          (generate-sources (rest los) srcs-hash)]
         [(is-entry? (first los))
-         (add-entry src-hash (first los))
+         (add-source-entry src-hash (first los))
          (populate-source (rest los) srcs-hash src-hash)]
         [else (populate-source (rest los) srcs-hash src-hash)]))
 
@@ -300,21 +382,31 @@
         [else (generate-sources (rest los) srcs-hash)]))
 
 
-(define (main)
-  (define hostsfile (open-input-file (hostsfile-path)))
-  (define hostsfile-los (pipe->los hostsfile))
-  (close-input-port hostsfile)
-  (define sources (generate-sources hostsfile-los))
 
-  (if (string-empty? (new-source))
-      (void) (add-source (new-source) sources))
+
+(define (main)
+  (define in (open-input-file (hostsfile-path)))
+  (define myhostsfile (hostsfile-parse in))
+  (define sources (hostsfile-sources myhostsfile))
   (if (list-sources?) (list-sources sources) (void))
   (if (string-empty? (source-to-list))
       (void) (list-entries (source-to-list) sources))
+  (close-input-port in)
 
-  (define hostsfile-out (open-output-file (hostsfile-out-path) #:exists 'append))
-  (write-hostsfile (new-source) sources hostsfile-out)
-  (close-output-port hostsfile-out))
+
+  (void))
+
+;(define hostsfile-los (pipe->los hostsfile))
+;(define sources (generate-sources hostsfile-los))
+  ;(if (string-empty? (new-source))
+  ;    (void) (add-source (new-source) sources))
+  ;(if (list-sources?) (list-sources sources) (void))
+  ;(if (string-empty? (source-to-list))
+  ;    (void) (list-entries (source-to-list) sources))
+
+  ;(define hostsfile-out (open-output-file (hostsfile-out-path) #:exists 'append))
+  ;(write-hostsfile (new-source) sources hostsfile-out)
+  ;(close-output-port hostsfile-out))
 
 
 
@@ -353,6 +445,7 @@
 ;;
 ;; specified with `-e <SOURCE>` flag
 (define source-to-list (make-parameter ""))
+
 
 ;; define commandline flags and options for program
 (define cmd
