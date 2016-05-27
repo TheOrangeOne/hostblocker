@@ -38,6 +38,11 @@
 ;; the tag
 (define-struct hostsfile (entries sources tags orig))
 
+;;  name: string?
+;;  entries: hash?
+;; TODO: finish definition
+(define-struct hostsfile-source (name entries))
+
 ;; (make-empty-hostsfile) -> hostsfile?
 ;; create an empty hostsfile
 (define (make-empty-hostsfile)
@@ -109,9 +114,10 @@
     [(string=? line "#! end src")
      ;; at this point we just want to add the new sources
      ;; hash to the entries list
-     (define hfwf (hostsfile-add-entry hf line))
+     (define source
+       (make-hostsfile-source src (hash-ref (hostsfile-sources hf) src)))
      (hostsfile-parse
-      in (hostsfile-add-entry hfwf (hash-ref (hostsfile-sources hf) src)))]
+      in (hostsfile-add-entry hf source))]
     [else
      ;; we want to add the line to the sources hash
      ;; as well as add any tags the entry has
@@ -131,10 +137,36 @@
     [(is-line-source? line)
      (define src (get-source line))
      (hash-set! (hostsfile-sources hf) src (make-hash))
-     (define hfwh (hostsfile-add-entry hf line))
-     (hostsfile-parse in (hostsfile-add-source-in hfwh src in))]
+     (hostsfile-parse in (hostsfile-add-source-in hf src in))]
     [else
      (hostsfile-parse in (hostsfile-add-entry hf line))]))
+
+
+;; (hostsfile-print-entry out entry) -> void?
+;;   out: output-port?
+;;   entry: (or hostsfile-source? string?)
+;;
+;; output a hostsfile entry to output-port `out`
+(define (hostsfile-print-entry out entry)
+  (cond
+    [(hostsfile-source? entry)
+     (define src-name (hostsfile-source-name entry))
+     (define src-hash (hostsfile-source-entries entry))
+     (fprintf out (format "#! src: ~a~n" src-name))
+     (hash-map src-hash (λ (k v) (fprintf out (get-line k v))))
+     (fprintf out (format "#! end src~n"))]
+    [else
+     (fprintf out (format "~a~n" entry))]))
+
+
+;; (hostsfile-write hf out) -> void?
+;;   hf: hostsfile?
+;;   out: output-port?
+;;
+;; write out hostsfile to `out`
+(define (hostsfile-write hf out)
+  (define entries (reverse (hostsfile-entries hf)))
+  (map (curry hostsfile-print-entry out) entries))
 
 
 
@@ -227,23 +259,6 @@
   (format "0.0.0.0 ~a  #!~a~a~n" k (if (empty? v) "" " ") (string-join v)))
 
 
-;; (write-hostsfile newsrc sources out) -> void?
-;;   newsrc: string?
-;;   sources: hash?
-;;   out: output-port?
-;;
-;; if there is a new source `newsrc` specified append
-;; the entries contained in `sources` for `newsrc` to
-;; the file specified by `out`
-(define (write-hostsfile newsrc sources out)
-  (cond
-    [(string-empty? newsrc) (void)]
-    [else
-     (define newsrc-hash (hash-ref sources newsrc))
-     (fprintf out "~n")
-     (fprintf out (format "#! src: ~a~n" newsrc))
-     (hash-map newsrc-hash (λ (k v) (fprintf out (get-line k v))))
-     (fprintf out "#! end src~n")]))
 
 
 ;; (list-entries src srcs-hash) -> (void)
@@ -270,7 +285,8 @@
 ;; return the entries for a given source `src`
 (define (get-entries src srcs-hash)
   (define errtxt
-    (error-text (format "source '~a' not found in ~a" src (hostsfile-path))))
+    (error-text
+     (format "source '~a' not found in ~a" src (hostsfile-path))))
   (define source-hash
     (hash-ref srcs-hash src
               (λ () (error errtxt))))
@@ -423,40 +439,35 @@
       (void) (list-entries (source-to-list) sources))
   (close-input-port in)
 
-
+  (cond
+    [(modify?)
+     (define hostsfile-out
+       (open-output-file (hostsfile-out-path) #:exists 'replace))
+     (hostsfile-write myhostsfile hostsfile-out)
+     (close-output-port hostsfile-out)]
+    [else (void)])
   (void))
 
-;(define hostsfile-los (pipe->los hostsfile))
-;(define sources (generate-sources hostsfile-los))
-  ;(if (string-empty? (new-source))
-  ;    (void) (add-source (new-source) sources))
-  ;(if (list-sources?) (list-sources sources) (void))
-  ;(if (string-empty? (source-to-list))
-  ;    (void) (list-entries (source-to-list) sources))
-
-  ;(define hostsfile-out (open-output-file (hostsfile-out-path) #:exists 'append))
-  ;(write-hostsfile (new-source) sources hostsfile-out)
-  ;(close-output-port hostsfile-out))
 
 
 
 ;; define program parameters
 
-;; hostsfile-path: the path of the hostsfile to be used as input
-;;                 to the program
+;; hostsfile-path: the path of the hostsfile to be used as input to the
+;;                 program
 ;;
 ;; modified with `-f` flag
 (define hostsfile-path (make-parameter "/etc/hosts"))
 
 
-;; hostsfile-out-path: the path of the hostsfile to be used as
-;;                     output for the program
+;; hostsfile-out-path: the path of the hostsfile to be used as output for
+;;                     the program
 ;;
 ;; modified with `-o` flag
 (define hostsfile-out-path (make-parameter (hostsfile-path)))
 
-;; new-source: a URL or file-path of a hostsfile to be added
-;;             as a source to the hosts file specified by (hostsfile-out-path)
+;; new-source: a URL or file-path of a hostsfile to be added as a source to
+;;             the hosts file specified by (hostsfile-out-path)
 ;;
 ;; specified with `-a` flag
 (define new-source (make-parameter ""))
@@ -466,16 +477,19 @@
 ;; enabled with `-v` flag
 (define logging (make-parameter #t))
 
-;; list-sources?: tell program to list all the sources found
-;;                in the hosts file specified by (hostsfile-path)
+;; list-sources?: tell program to list all the sources found in the hosts
+;;                file specified by (hostsfile-path)
 (define list-sources? (make-parameter #f))
 
-;; source-to-list: tell program to list the entries for
-;;                 a specified source
+;; source-to-list: tell program to list the entries for a specified source
 ;;
 ;; specified with `-s <SOURCE>` flag
 (define source-to-list (make-parameter ""))
 
+;; modify?: tell program to write to (hostsfile-out-path)
+;;
+;; set to #t whenever changed are made to the state of the hostsfile
+(define modify? (make-parameter #f))
 
 ;; define commandline flags and options for program
 ;; TODO: figure out commands and logic of flags
@@ -484,17 +498,19 @@
    #:program "hostblocker"
    #:once-each
    [("-f" "--file") filename
-    "specify hosts file: <filename>"
+    "specify hosts file to use: <filename>"
     (hostsfile-path filename)
     (hostsfile-out-path (hostsfile-path))]
    [("-a" "--add") source
     "add a local or remote source: <source>"
+    (modify? #t)
     (new-source source)]
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
    [("-o" "--out") filename
     "specify output hosts file: <filename>"
+    (modify? #t)
     (hostsfile-out-path filename)]
    #:once-any
    [("-l" "--list")
