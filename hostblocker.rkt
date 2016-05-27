@@ -20,28 +20,26 @@
 ;;   srcs: hash?
 ;;   tags: hash?
 ;;
-;; we wish to maintain the ordering of entries and source
-;; blocks within the hostsfile in case there are manually
-;; added entries which the user would not like us to mess with
+;; we wish to maintain the ordering of entries and source blocks within
+;; the hostsfile in case there are manually added entries which the user
+;; would not like us to mess with
 ;;
-;; string? elements in `entries` represent raw lines from
-;; the hostsfile not contained within #! source blocks
+;; string? elements in `entries` represent raw lines from the hostsfile
+;; not contained within #! source blocks
 ;;
 ;; hash? elements in `entries` represent sources
 ;;
-;; `srcs` is a hash containing all the sources
-;; as keys with the values also being a hash with keys
-;; being all of the entries for a source and the value
-;; for each entry being a list of strings for the tags
-;; of the entry
+;; `srcs` is a hash containing all the sources as keys with the values also
+;; being a hash with keys being all of the entries for a source and the
+;; value for each entry being a list of strings for the tags of the entry
 ;;
-;; `tags` is a hash containing all the entries' tags
-;; the keys being the tag (string?) the values
-;; being a list of string, the entries possessing
+;; `tags` is a hash containing all the entries' tags the keys being the tag
+;; (string?) the values being a list of string, the entries possessing
 ;; the tag
 (define-struct hostsfile (entries sources tags orig))
 
-
+;; (make-empty-hostsfile) -> hostsfile?
+;; create an empty hostsfile
 (define (make-empty-hostsfile)
   (make-hostsfile '() (make-hash) (make-hash) '()))
 
@@ -51,18 +49,24 @@
           (hostsfile-tags hf)
           (hostsfile-orig hf)))
 
-
-(define (add-tag-entry src tag-hash tag)
-  (cond [(hash-has-key? tag-hash tag)
-         (define vals (hash-ref tag-hash tag))
-         (hash-set! tag-hash tag (cons src vals))]
+;; (add-tag-entry src tags-hash tag) -> void?
+;;   src: string?
+;;   tags-hash: hash?
+;;   tag: string?
+;;
+;; add a host
+(define (add-tag-entry tags-hash host tag)
+  (cond [(hash-has-key? tags-hash tag)
+         (define vals (hash-ref tags-hash tag))
+         (hash-set! tags-hash tag (cons host vals))]
         [else
-         (hash-set! tag-hash tag (list src))]))
+         (hash-set! tags-hash tag (list host))]))
 
 
 (define (hostsfile-add-entry hf val)
   (define-values (ents srcs tags orig) (hostsfile-values hf))
-  (make-hostsfile (cons val ents) srcs tags (if (hash? val) orig (cons val orig))))
+  (make-hostsfile
+   (cons val ents) srcs tags (if (hash? val) orig (cons val orig))))
 
 
 (define (hostsfile-add-source-entry hf src entry)
@@ -70,7 +74,7 @@
   (define src-hash (hash-ref srcs src))
   (add-source-entry src-hash entry)
   (define entry-tags (get-tags entry))
-  (map (curry (curry add-tag-entry src) tags) entry-tags)
+  (map (curry (curry add-tag-entry tags) (get-host entry)) entry-tags)
   (make-hostsfile ents srcs tags (cons entry orig)))
 
 
@@ -105,6 +109,7 @@
 ;;
 ;; given an input port produce a hostfile
 (define (hostsfile-parse in [hf (make-empty-hostsfile)])
+  (pretty-print (hostsfile-tags hf))
   (define line (read-line in))
   (cond
     [(eof-object? line) hf]
@@ -363,6 +368,15 @@
   (third (string-split line)))
 
 
+;; (get-host line) -> string?
+;;   line: string?
+;;
+;; given an entry `line` return the host
+;; TODO: rewrte using pattern matching
+(define (get-host line)
+  (second (string-split line)))
+
+
 ;; (generate-sources los [hf-hash (make-hash)]) -> hash?
 ;;   los: (listof string?)
 ;;   hf-hash: hash?
@@ -443,32 +457,34 @@
 ;; source-to-list: tell program to list the entries for
 ;;                 a specified source
 ;;
-;; specified with `-e <SOURCE>` flag
+;; specified with `-s <SOURCE>` flag
 (define source-to-list (make-parameter ""))
 
 
 ;; define commandline flags and options for program
+;; TODO: figure out commands and logic of flags
 (define cmd
   (command-line
    #:program "hostblocker"
    #:once-each
-   [("-a" "--add") source
-    "add a local or remote source: <source>"
-    (new-source source)]
-   [("-l" "--list")
-    "list known sources in the hostfile specified"
-    (list-sources? #t)]
-   [("-e" "--entries") source
-    "list entries of a source: <source>"
-    (source-to-list source)]
    [("-f" "--file") filename
     "specify hosts file: <filename>"
     (hostsfile-path filename)
     (hostsfile-out-path (hostsfile-path))]
+   [("-a" "--add") source
+    "add a local or remote source: <source>"
+    (new-source source)]
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
    [("-o" "--out") filename
     "specify output hosts file: <filename>"
-    (hostsfile-out-path filename)]))
+    (hostsfile-out-path filename)]
+   #:once-any
+   [("-l" "--list")
+    "list known sources in the hostfile specified"
+    (list-sources? #t)]
+   [("-s" "--list-source") source
+    "list entries of a source: <source>"
+    (source-to-list source)]))
 (main)
