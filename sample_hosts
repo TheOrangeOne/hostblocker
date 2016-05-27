@@ -2,12 +2,12 @@
 127.0.0.1   localhost.localdomain   localhost   orange
 
 #! src: http://adaway.org/hosts.txt
-0.0.0.0 ad-g.doubleclick.net           #! ad crap
-0.0.0.0 adsense.com                    #! ad
+0.0.0.0 ad-g.doubleclick.net           #! ads crap
+0.0.0.0 adsense.com                    #! ads
 #! end src
 
 #! src: /home/kyle/downloads/hosts
-0.0.0.0 facebook.com                   #! social crap
+0.0.0.0 facebook.com                   #! social crap ads
 0.0.0.0 twitter.com                    #! social
 0.0.0.0 reddit.com                     #! productivity
 0.0.0.0 youtube.com                    #! productivity

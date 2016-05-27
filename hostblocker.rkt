@@ -43,6 +43,10 @@
 (define (make-empty-hostsfile)
   (make-hostsfile '() (make-hash) (make-hash) '()))
 
+;; (hostsfile-values hf) -> list? hash? hash? list?
+;;   hf: hostsfile?
+;;
+;; produce the values for a hostsfile
 (define (hostsfile-values hf)
   (values (hostsfile-entries hf)
           (hostsfile-sources hf)
@@ -62,13 +66,24 @@
         [else
          (hash-set! tags-hash tag (list host))]))
 
-
+;; (hostsfile-add-entry hf val) -> hostsfile?
+;;   hf: hostsfile?
+;;   val: (or hash? string?)
+;;
+;; produce a hostsfile with val added to entries and if val is a string add
+;; val to orig
 (define (hostsfile-add-entry hf val)
   (define-values (ents srcs tags orig) (hostsfile-values hf))
   (make-hostsfile
    (cons val ents) srcs tags (if (hash? val) orig (cons val orig))))
 
 
+;; (hostsfile-add-source-entry hf src entry) -> hostsfile?
+;;   hf: hostsfile?
+;;   src: string?
+;;   entry: string?
+;;
+;; given a hostsfile, source and entry produce a hostsfile
 (define (hostsfile-add-source-entry hf src entry)
   (define-values (ents srcs tags orig) (hostsfile-values hf))
   (define src-hash (hash-ref srcs src))
