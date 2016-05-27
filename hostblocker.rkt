@@ -109,8 +109,9 @@
     [(string=? line "#! end src")
      ;; at this point we just want to add the new sources
      ;; hash to the entries list
+     (define hfwf (hostsfile-add-entry hf line))
      (hostsfile-parse
-      in (hostsfile-add-entry hf (hash-ref (hostsfile-sources hf) src)))]
+      in (hostsfile-add-entry hfwf (hash-ref (hostsfile-sources hf) src)))]
     [else
      ;; we want to add the line to the sources hash
      ;; as well as add any tags the entry has
@@ -124,14 +125,14 @@
 ;;
 ;; given an input port produce a hostfile
 (define (hostsfile-parse in [hf (make-empty-hostsfile)])
-  (pretty-print (hostsfile-tags hf))
   (define line (read-line in))
   (cond
     [(eof-object? line) hf]
     [(is-line-source? line)
      (define src (get-source line))
      (hash-set! (hostsfile-sources hf) src (make-hash))
-     (hostsfile-parse in (hostsfile-add-source-in hf src in))]
+     (define hfwh (hostsfile-add-entry hf line))
+     (hostsfile-parse in (hostsfile-add-source-in hfwh src in))]
     [else
      (hostsfile-parse in (hostsfile-add-entry hf line))]))
 
