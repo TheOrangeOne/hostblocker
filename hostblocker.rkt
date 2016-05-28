@@ -6,7 +6,7 @@
  net/http-client
  net/head
  net/url
- rackunit)
+ data/gvector)
 
 (provide (all-defined-out))
 
@@ -16,7 +16,7 @@
 
 
 ;; define a hostsfile as the following:
-;;   entries: (listof (anyof string? hash?))
+;;   entries: (gvector (anyof string? hash?))
 ;;   srcs: hash?
 ;;   tags: hash?
 ;;
@@ -46,9 +46,10 @@
 ;; (make-empty-hostsfile) -> hostsfile?
 ;; create an empty hostsfile
 (define (make-empty-hostsfile)
-  (make-hostsfile '() (make-hash) (make-hash) '()))
+  (make-hostsfile (make-gvector) (make-hash) (make-hash) '()))
 
-;; (hostsfile-values hf) -> list? hash? hash? list?
+
+;; (hostsfile-values hf) -> gvector? hash? hash? list?
 ;;   hf: hostsfile?
 ;;
 ;; produce the values for a hostsfile
@@ -57,6 +58,7 @@
           (hostsfile-sources hf)
           (hostsfile-tags hf)
           (hostsfile-orig hf)))
+
 
 ;; (add-tag-entry src tags-hash tag) -> void?
 ;;   src: string?
@@ -71,6 +73,60 @@
         [else
          (hash-set! tags-hash tag (list host))]))
 
+
+;; (fetch-hostsfile url) -> (input-pipe)
+;;   url: string?
+;;
+;; GET hostsfile located at url
+(define (get-remote-hostsfile url)
+  (with-handlers
+    ([(λ (x) #t)
+      (λ (x) (error (error-text (format "could not connect to ~a" url))))])
+    (define-values
+      (status header resp)
+      (http-sendrecv/url (string->url url) #:method "GET"))
+    resp))
+
+
+;; TODO: document or clean up
+(define (get-local-hostsfile path)
+  (with-handlers
+    ([(λ (x) #t)
+      (λ (x)
+        (error
+         (error-text (format "could not open or find file '~a'" path))))])
+    (open-input-file path)))
+
+
+;; TODO: document or clean up
+(define (get-new-source src-file)
+  (if (regexp-match? url-regex src-file)
+      (get-remote-hostsfile src-file)
+      (get-local-hostsfile src-file)))
+
+
+;; TODO: document or clean up
+;(define (generate-entries newsrc-pipe sources [entries (make-hash)])
+;  (define line (read-line newsrc-pipe))
+;  (cond [(eof-object? line) entries]
+;        [(is-entry? line)
+;         (add-source-entry entries line)
+;         (generate-entries newsrc-pipe sources entries)]
+;        [else (generate-entries newsrc-pipe sources entries)]))
+
+
+(define (hostsfile-add-new-source hf newsrc)
+  (define sources (hostsfile-sources hf))
+  (define entries (hostsfile-entries hf))
+  (if (hash-has-key? sources newsrc)
+      (error (error-text (format "source '~a' already exists" newsrc)))
+      (void))
+  (hash-set! sources newsrc (make-hash))
+  (gvector-add! entries "")
+  (define newsrc-pipe (get-new-source newsrc))
+  (hostsfile-add-source-in hf newsrc newsrc-pipe #f))
+
+
 ;; (hostsfile-add-entry hf val) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   val: (or hash? string?)
@@ -79,8 +135,9 @@
 ;; val to orig
 (define (hostsfile-add-entry hf val)
   (define-values (ents srcs tags orig) (hostsfile-values hf))
+  (gvector-add! ents val)
   (make-hostsfile
-   (cons val ents) srcs tags (if (hash? val) orig (cons val orig))))
+   ents srcs tags (if (string? val) (cons val orig) orig)))
 
 
 ;; (hostsfile-add-source-entry hf src entry) -> hostsfile?
@@ -98,31 +155,50 @@
   (make-hostsfile ents srcs tags (cons entry orig)))
 
 
-;; (hostsfile-add-source-in hf src in) -> (hostsfile-parse ...)
+;; (hostsfile-is-entry? line) -> boolean?
+;;   line: string?
+;;
+;; determines if the given line is a valid entry
+;; that is, does not start with '#'
+;; TODO: pattern match to only match lines of form
+;;        XXXX.XXXX.XXXX.XXXX <URL>
+;; may not be required, have to look up valid entries in hostsfile
+(define (hostsfile-is-entry? line)
+  (and (not (string=? line ""))  (not (char=? (string-ref line 0) #\#))))
+
+
+;; (hostsfile-add-source-in hf src in err) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   src: string?
 ;;   in: input-port?
+;;   err: boolean?
 ;;
-;; note: mutually recursive with (hostsfile-parse ...)
 ;; assuming the "#! src: `src`" line has been read, read input from `in`
 ;; populating `src` with entries until the line "#! end src" is read
-(define (hostsfile-add-source-in hf src in)
+;; if err? throw an error on reading eof else return the hostsfile
+(define (hostsfile-add-source-in hf src in [err-on-eof #t])
   (define line (read-line in))
   (cond
-    [(eof-object? in)
-     (error (error-text "expected to read '#! end src' got EOF"))]
+    [(eof-object? line)
+     (if err-on-eof
+         (error (error-text "expected to read '#! end src' got EOF"))
+         (hostsfile-add-entry
+          hf (make-hostsfile-source
+              src (hash-ref (hostsfile-sources hf) src))))]
     [(string=? line "#! end src")
      ;; at this point we just want to add the new sources
      ;; hash to the entries list
      (define source
        (make-hostsfile-source src (hash-ref (hostsfile-sources hf) src)))
-     (hostsfile-parse
-      in (hostsfile-add-entry hf source))]
-    [else
+      (hostsfile-add-entry hf source)]
+    [(hostsfile-is-entry? line)
      ;; we want to add the line to the sources hash
      ;; as well as add any tags the entry has
      (hostsfile-add-source-in
-      (hostsfile-add-source-entry hf src line) src in)]))
+      (hostsfile-add-source-entry hf src line) src in err-on-eof)]
+    [else
+     ;; ignore all other entries contained within src blocks
+     (hostsfile-add-source-in hf src in err-on-eof)]))
 
 
 ;; (parse in hf) -> hostsfile?
@@ -140,6 +216,21 @@
      (hostsfile-parse in (hostsfile-add-source-in hf src in))]
     [else
      (hostsfile-parse in (hostsfile-add-entry hf line))]))
+
+
+;; (get-line k v) -> string?
+;;   k: string?
+;;   v: (listof string?)
+;;
+;; returns a line/entry for hostsfile given the
+;; host `k` and the tags for the host `v`
+;; eg:
+;; (get-line "facebook.com" '("crap" "bad")) -> "0.0.0.0 facebook.com #! crap bad"
+(define (get-line k v)
+  (define host (format "0.0.0.0 ~a" k))
+  (define len (string-length host))
+  (define fmt (~a host #:min-width 90))
+  (format "~a#!~a~a~n" fmt (if (empty? v) "" " ") (string-join v)))
 
 
 ;; (hostsfile-print-entry out entry) -> void?
@@ -165,8 +256,9 @@
 ;;
 ;; write out hostsfile to `out`
 (define (hostsfile-write hf out)
-  (define entries (reverse (hostsfile-entries hf)))
+  (define entries (gvector->list (hostsfile-entries hf)))
   (map (curry hostsfile-print-entry out) entries))
+
 
 
 
@@ -179,86 +271,6 @@
 ;; string `line`
 (define (log line)
   (if (logging) (displayln line) (void)))
-
-
-;; (fetch-hostsfile url) -> (input-pipe)
-;;   url: string?
-;;
-;; GET hostsfile located at url
-(define (get-remote-hostsfile url)
-  (with-handlers
-    ([(λ (x) #t)
-      (λ (x) (error (error-text (format "could not connect to ~a" url))))])
-    (define-values (status header resp)
-      (http-sendrecv/url (string->url url) #:method "GET"))
-    resp))
-
-
-;; (fetch-hostsfile url) -> (listof string)
-;; GET hostsfile located at url
-;; TODO: document or clean up
-(define (get-remote-hostsfile-los url)
-  (pipe->los (get-remote-hostsfile url)))
-
-
-;; TODO: document or clean up
-(define (get-local-hostsfile path)
-  (with-handlers
-    ([(λ (x) #t)
-      (λ (x) (error (error-text (format "could not open or find file '~a'" path))))])
-    (open-input-file path)))
-
-
-;; TODO: document or clean up
-(define (get-local-hostsfile-los path)
-  (pipe->los (get-local-hostsfile path)))
-
-
-;; TODO: document or clean up
-(define (parse-hostsfile file)
-  (define los (pipe->los file))
-  (void (map displayln los)))
-
-
-;; TODO: document or clean up
-(define (read-source src-file)
-  (if (regexp-match? url-regex src-file)
-      (get-remote-hostsfile src-file)
-      (get-local-hostsfile src-file)))
-
-
-;; TODO: document or clean up
-(define (generate-entries newsrc-pipe sources [entries (make-hash)])
-  (define line (read-line newsrc-pipe))
-  (cond [(eof-object? line) entries]
-        [(is-entry? line)
-         (add-source-entry entries line)
-         (generate-entries newsrc-pipe sources entries)]
-        [else (generate-entries newsrc-pipe sources entries)]))
-
-
-;; TODO: document or clean up
-(define (add-source newsrc sources)
-  (if (hash-has-key? sources newsrc)
-      (error (error-text (format "source '~a' already exists" newsrc)))
-      (void))
-  (define newsrc-pipe (read-source newsrc))
-  (hash-set! sources newsrc (generate-entries newsrc-pipe sources))
-  (void))
-
-
-;; (get-line k v) -> string?
-;;   k: string?
-;;   v: (listof string?)
-;;
-;; returns a line/entry for hostsfile given the
-;; host `k` and the tags for the host `v`
-;; eg:
-;; (get-line "facebook.com" '("crap" "bad")) -> "0.0.0.0 facebook.com #! crap bad"
-(define (get-line k v)
-  (format "0.0.0.0 ~a  #!~a~a~n" k (if (empty? v) "" " ") (string-join v)))
-
-
 
 
 ;; (list-entries src srcs-hash) -> (void)
@@ -354,7 +366,8 @@
   (and (not (string=? line ""))  (not (char=? (string-ref line 0) #\#))))
 
 
-;; (populate-source los srcs-hash src-hash) -> (generate-sources (rest los) srcs-hash)
+;; (populate-source los srcs-hash src-hash)
+;;                               -> (generate-sources (rest los) srcs-hash)
 ;;   los: (listof string?)
 ;;   srcs-hash: hash?
 ;;   src-hash: hash?
@@ -429,15 +442,12 @@
 
 
 
-
 (define (main)
   (define in (open-input-file (hostsfile-path)))
   (define myhostsfile (hostsfile-parse in))
-  (define sources (hostsfile-sources myhostsfile))
-  (if (list-sources?) (list-sources sources) (void))
-  (if (string-empty? (source-to-list))
-      (void) (list-entries (source-to-list) sources))
   (close-input-port in)
+
+  (map (λ (x) (x myhostsfile)) (reverse (modifiers)))
 
   (cond
     [(modify?)
@@ -445,7 +455,9 @@
        (open-output-file (hostsfile-out-path) #:exists 'replace))
      (hostsfile-write myhostsfile hostsfile-out)
      (close-output-port hostsfile-out)]
-    [else (void)])
+    [else
+     ;(hostsfile-write myhostsfile (current-output-port))
+     (void)])
   (void))
 
 
@@ -455,44 +467,30 @@
 
 ;; hostsfile-path: the path of the hostsfile to be used as input to the
 ;;                 program
-;;
-;; modified with `-f` flag
 (define hostsfile-path (make-parameter "/etc/hosts"))
 
 
 ;; hostsfile-out-path: the path of the hostsfile to be used as output for
 ;;                     the program
-;;
-;; modified with `-o` flag
 (define hostsfile-out-path (make-parameter (hostsfile-path)))
 
-;; new-source: a URL or file-path of a hostsfile to be added as a source to
-;;             the hosts file specified by (hostsfile-out-path)
-;;
-;; specified with `-a` flag
-(define new-source (make-parameter ""))
+;; modifiers: a list of functions that accept a single parameter, a
+;;            hostsfile that get applied in (main)
+(define modifiers (make-parameter '()))
+
+;; modify?: tell program to write to (hostsfile-out-path)
+(define modify? (make-parameter #f))
 
 ;; logging: enable logging or verbose output
-;;
-;; enabled with `-v` flag
 (define logging (make-parameter #t))
 
 ;; list-sources?: tell program to list all the sources found in the hosts
 ;;                file specified by (hostsfile-path)
 (define list-sources? (make-parameter #f))
 
-;; source-to-list: tell program to list the entries for a specified source
-;;
-;; specified with `-s <SOURCE>` flag
-(define source-to-list (make-parameter ""))
 
-;; modify?: tell program to write to (hostsfile-out-path)
-;;
-;; set to #t whenever changed are made to the state of the hostsfile
-(define modify? (make-parameter #f))
 
 ;; define commandline flags and options for program
-;; TODO: figure out commands and logic of flags
 (define cmd
   (command-line
    #:program "hostblocker"
@@ -501,10 +499,7 @@
     "specify hosts file to use: <filename>"
     (hostsfile-path filename)
     (hostsfile-out-path (hostsfile-path))]
-   [("-a" "--add") source
-    "add a local or remote source: <source>"
-    (modify? #t)
-    (new-source source)]
+    ;(new-source source)]
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
@@ -512,11 +507,26 @@
     "specify output hosts file: <filename>"
     (modify? #t)
     (hostsfile-out-path filename)]
-   #:once-any
    [("-l" "--list")
     "list known sources in the hostfile specified"
-    (list-sources? #t)]
+    (modifiers
+     (cons
+      (λ (x)
+        (list-sources (hostsfile-sources x)))
+      (modifiers)))]
+   #:multi
+   [("-a" "--add") source
+    "add a local or remote source: <source>"
+    (modify? #t)
+    (modifiers
+     (cons
+      (λ (x)
+        (hostsfile-add-new-source x source)) (modifiers)))]
    [("-s" "--list-source") source
     "list entries of a source: <source>"
-    (source-to-list source)]))
+    (modifiers
+     (cons
+      (λ (x)
+        (list-entries source (hostsfile-sources x)))
+      (modifiers)))]))
 (main)
