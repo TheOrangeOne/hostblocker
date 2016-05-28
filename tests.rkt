@@ -4,7 +4,8 @@
  "lib.rkt"
  rackunit)
 
-(require "hostblocker.rkt")
+;(require "hostblocker.rkt")
+(require "hostsfile.rkt")
 
 
 (define sample-hf-los
