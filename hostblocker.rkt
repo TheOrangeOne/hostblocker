@@ -260,42 +260,30 @@
   (map (curry hostsfile-print-entry out) entries))
 
 
-
-
-;; (log line) -> void?
-;;   line: string?
-;; requires:
-;;   parameters: (logging)
-;;
-;; if logging is enabled (equal? (logging) #t) then output the given
-;; string `line`
-(define (log line)
-  (if (logging) (displayln line) (void)))
-
-
-;; (list-entries src srcs-hash) -> (void)
+;; (hostsfile-list-entries src hf) -> (void)
 ;;   src: string?
-;;   srcs-hash: hash?
+;;   hf: hostsfile?
 ;;
 ;; requires:
 ;;   parameters: (hostsfile-path)
 ;; side-effects:
-;;   output the entries for a given source hash `srcs-hash`
-(define (list-entries src srcs-hash)
-  (define entries (get-entries src srcs-hash))
+;;   output the entries for a given source in the given hostsfile
+(define (hostsfile-list-entries src hf)
+  (define entries (hostsfile-get-entries src hf))
   (displayln (format "entries for source ~a:" src))
   (void (map (λ (x) (displayln (format  "  ~a" x))) entries)))
 
 
-;; (get-entries src srcs-hash) -> (listof string?)
+;; (hostsfile-get-entries src hf) -> (listof string?)
 ;;   src: string?
-;;   src-hash: hash?
+;;   hf: hostsfile?
 ;;
 ;; requires:
 ;;   parameters: (hostsfile-path)
 ;;
 ;; return the entries for a given source `src`
-(define (get-entries src srcs-hash)
+(define (hostsfile-get-entries src hf)
+  (define srcs-hash (hostsfile-sources hf))
   (define errtxt
     (error-text
      (format "source '~a' not found in ~a" src (hostsfile-path))))
@@ -312,7 +300,7 @@
 ;;   parameters: (hostsfile-path)
 ;; side-effects:
 ;;   print out the sources given the sources hash
-(define (list-sources srcs-hash)
+(define (hostsfile-list-sources srcs-hash)
   (define sources (get-sources srcs-hash))
   (displayln (format "sources for hostfile ~a:" (hostsfile-path)))
   (void (map (λ (x) (displayln (format  "  ~a" x))) sources)))
@@ -322,8 +310,19 @@
 ;;   srcs-hash: hash?
 ;;
 ;; return the sources of a sources hash
-(define (get-sources srcs-hash)
+(define (hostsfile-get-sources srcs-hash)
   (hash-map srcs-hash (λ (k v) k)))
+
+
+;; (log line) -> void?
+;;   line: string?
+;; requires:
+;;   parameters: (logging)
+;;
+;; if logging is enabled (equal? (logging) #t) then output the given
+;; string `line`
+(define (log line)
+  (if (logging) (displayln line) (void)))
 
 
 ;; (get-tags line) -> (listof string?)
@@ -456,6 +455,7 @@
      (hostsfile-write myhostsfile hostsfile-out)
      (close-output-port hostsfile-out)]
     [else
+     ; print to stdout
      ;(hostsfile-write myhostsfile (current-output-port))
      (void)])
   (void))
@@ -499,34 +499,36 @@
     "specify hosts file to use: <filename>"
     (hostsfile-path filename)
     (hostsfile-out-path (hostsfile-path))]
-    ;(new-source source)]
+
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
+
    [("-o" "--out") filename
     "specify output hosts file: <filename>"
     (modify? #t)
     (hostsfile-out-path filename)]
+
    [("-l" "--list")
     "list known sources in the hostfile specified"
+    (define list-sources-dec
+      (λ (x) (hostsfile-list-sources (hostsfile-sources x))))
     (modifiers
-     (cons
-      (λ (x)
-        (list-sources (hostsfile-sources x)))
-      (modifiers)))]
+     (cons list-sources-dec (modifiers)))]
+
    #:multi
    [("-a" "--add") source
     "add a local or remote source: <source>"
     (modify? #t)
+    (define add-source-dec
+      (λ (x) (hostsfile-add-new-source x source)))
     (modifiers
-     (cons
-      (λ (x)
-        (hostsfile-add-new-source x source)) (modifiers)))]
+     (cons add-source-dec (modifiers)))]
+
    [("-s" "--list-source") source
     "list entries of a source: <source>"
+    (define list-entries-dec
+      (λ (x) (hostsfile-list-entries source x)))
     (modifiers
-     (cons
-      (λ (x)
-        (list-entries source (hostsfile-sources x)))
-      (modifiers)))]))
+     (cons list-entries-dec (modifiers)))]))
 (main)
