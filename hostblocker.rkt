@@ -301,7 +301,7 @@
 ;; side-effects:
 ;;   print out the sources given the sources hash
 (define (hostsfile-list-sources srcs-hash)
-  (define sources (get-sources srcs-hash))
+  (define sources (hostsfile-get-sources srcs-hash))
   (displayln (format "sources for hostfile ~a:" (hostsfile-path)))
   (void (map (λ (x) (displayln (format  "  ~a" x))) sources)))
 
