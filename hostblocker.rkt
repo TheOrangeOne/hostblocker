@@ -100,7 +100,7 @@
 
 ;; TODO: document or clean up
 (define (get-new-source src-file)
-  (if (regexp-match? url-regex src-file)
+  (if (regexp-match? lib-url-regex src-file)
       (get-remote-hostsfile src-file)
       (get-local-hostsfile src-file)))
 
@@ -122,7 +122,7 @@
       (error (error-text (format "source '~a' already exists" newsrc)))
       (void))
   (hash-set! sources newsrc (make-hash))
-  (gvector-add! entries "")
+  (gvector-add! entries "")                    ; add a newline before src
   (define newsrc-pipe (get-new-source newsrc))
   (hostsfile-add-source-in hf newsrc newsrc-pipe #f))
 
@@ -274,7 +274,7 @@
   (void (map (λ (x) (displayln (format  "  ~a" x))) entries)))
 
 
-;; (hostsfile-get-entries src hf) -> (listof string?)
+;; (hostsfile-get-entries-los src hf) -> (listof string?)
 ;;   src: string?
 ;;   hf: hostsfile?
 ;;
@@ -282,7 +282,7 @@
 ;;   parameters: (hostsfile-path)
 ;;
 ;; return the entries for a given source `src`
-(define (hostsfile-get-entries src hf)
+(define (hostsfile-get-entries-los src hf)
   (define srcs-hash (hostsfile-sources hf))
   (define errtxt
     (error-text
@@ -291,6 +291,22 @@
     (hash-ref srcs-hash src
               (λ () (error errtxt))))
   (hash-map source-hash (λ (k v) k)))
+
+
+;; (hostsfile-get-entries src hf) -> (hash?)
+;;   src: string?
+;;   hf: hostsfile?
+;;
+;; requires:
+;;   parameters: (hostsfile-path)
+;;
+;; return the entries for a given source `src`
+(define (hostsfile-get-entries hf src)
+  (define srcs-hash (hostsfile-sources hf))
+  (define errtxt
+    (error-text
+     (format "source '~a' not found in ~a" src (hostsfile-path))))
+  (hash-ref srcs-hash src (λ () (error errtxt))))
 
 
 ;; (list-sources srcs-hash) -> (void)
@@ -306,12 +322,34 @@
   (void (map (λ (x) (displayln (format  "  ~a" x))) sources)))
 
 
-;; (get-sources srcs-hash) -> (listof string?)
+;; (hostsfile-get-sources srcs-hash) -> (listof string?)
 ;;   srcs-hash: hash?
 ;;
 ;; return the sources of a sources hash
 (define (hostsfile-get-sources srcs-hash)
   (hash-map srcs-hash (λ (k v) k)))
+
+
+;; (hostsfile-has-tag? hf tag) -> boolean?
+;;   hf: hostsfile?
+;;   tag: string?
+;;
+(define (hostsfile-has-tag? hf tag)
+  (define tags (hostsfile-tags hf))
+  (hash-has-key? tags tag))
+
+
+;; (hostsfile-entry-tags hf entry) -> (listof string?)
+;;   hf: hostsfile?
+;;   entry: string?
+;;
+;; TODO: maybe add another hash? to struct to get constant
+;;       lookups for entries
+(define (hostsfile-source-entry-tags hf src entry)
+  (define sources (hostsfile-sources hf))
+  (define source (hash-ref sources src))
+  (hash-ref source entry))
+
 
 
 ;; (log line) -> void?
@@ -454,9 +492,9 @@
        (open-output-file (hostsfile-out-path) #:exists 'replace))
      (hostsfile-write myhostsfile hostsfile-out)
      (close-output-port hostsfile-out)]
+    ;[(empty? (vector->list (current-command-line-arguments)))
+    ; (hostsfile-write myhostsfile (current-output-port))]
     [else
-     ; print to stdout
-     ;(hostsfile-write myhostsfile (current-output-port))
      (void)])
   (void))
 
@@ -531,4 +569,6 @@
       (λ (x) (hostsfile-list-entries source x)))
     (modifiers
      (cons list-entries-dec (modifiers)))]))
+
+
 (main)

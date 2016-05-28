@@ -1,13 +1,16 @@
 #lang racket
 
-;; this module is meant to provide useful functions
-;; of all sorts
+;; this module is meant to provide useful functions of all sorts
+
+(require srfi/1)
 
 (provide (all-defined-out))
 
 
 ;; http://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url
-(define url-regex #px"(http(s)?:\\/\\/.)?(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{2,256}\\.[a-z]{2,6}([-a-zA-Z0-9@:%_\\+.~#?&//=]*)")
+(define lib-url-regex
+  #px"(http(s)?:\\/\\/.)?(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{2,256}\\.[a-z]{2,6}([-a-zA-Z0-9@:%_\\+.~#?&//=]*)")
+
 
 ;; (error-text msg) -> string?
 ;;   msg: string?
@@ -34,3 +37,18 @@
   (if (eof-object? line)
       empty
       (cons line (pipe->los pipe))))
+
+;; (los->input-port los) -> input-port?
+;;   los: (listof string?)
+;;
+;; convert a list of string to an input-port, really useful for testing
+(define (los->input-port los)
+  (open-input-string (string-join los "\n")))
+
+
+;; (in-list? val lst) -> boolean?
+;;   val: any?
+;;   lst: list?
+;; return true if val is in lst
+(define (in-list? val lst)
+  (if (list-index (curry equal? val) lst) #t #f))
