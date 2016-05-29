@@ -39,7 +39,8 @@
 ;; create an empty hostsfile
 (define (make-empty-hostsfile)
   (make-hostsfile
-   (make-gvector) (make-immutable-hash) (make-immutable-hash) '()))
+   (make-gvector)
+   (make-immutable-hash) (make-immutable-hash) (make-immutable-hash)))
 
 
 ;; (hostsfile-values hf) -> gvector? hash? hash?
@@ -92,7 +93,7 @@
   (hash-map hosts (λ (k v) k)))
 
 
-;; (fetch-hostsfile url) -> (input-pipe)
+;; (fetch-hostsfile url) -> input-port?
 ;;   url: string?
 ;;
 ;; GET hostsfile located at url
@@ -121,6 +122,13 @@
   (if (regexp-match? lib-url-regex src-file)
       (get-remote-hostsfile src-file)
       (get-local-hostsfile src-file)))
+
+
+(define (get-host-tags line)
+  (if (string-contains? line "#!")
+      (string-split (second (regexp-split "\\#!" line)))
+      '()))
+
 
 
 ;; (get-host line) -> string?
@@ -156,8 +164,11 @@
 ;; TODO: pattern match to only match lines of form
 ;;        XXXX.XXXX.XXXX.XXXX <URL>
 ;; may not be required, have to look up valid entries in hostsfile
+(define tag-matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*\\#!.*"))
+(define matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*"))
 (define (hostsfile-is-entry? line)
-  (and (not (string=? line ""))  (not (char=? (string-ref line 0) #\#))))
+  (or (regexp-match? tag-matcher line) (regexp-match? matcher line)))
+  ;(and (not (string=? line ""))  (not (char=? (string-ref line 0) #\#))))
 
 
 (define (is-source-start? line)
@@ -184,6 +195,19 @@
 (define (hostsfile-has-tag? hf tag)
   (define tags (hostsfile-tags hf))
   (hash-has-key? tags tag))
+
+
+;; (hostsfile-get-sources hf) -> (listof string?)
+;;   hf: hostsfile?
+(define (hostsfile-get-sources hf)
+  (hostsfile-sources hf))
+
+
+;; (hostsfile-has-source? hf src) -> boolean?
+;;   hf: hostsfile?
+;;   src: string?
+(define (hostsfile-has-source? hf src)
+  (hash-has-key? (hostsfile-sources hf) src))
 
 
 ;; (hostsfile-lines-add lines line) -> (void)
@@ -236,13 +260,13 @@
           host (rest lst))]))
 
 
-;; (hostsfile-lines-add lines line) -> hostsfile?
+;; (hostsfile-add-source lines line) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   src: string?
 (define (hostsfile-add-source hf src)
   (define-values (lines hosts tags srcs) (hostsfile-values hf))
   (hostsfile-add-line hf src)
-  (make-hostsfile lines hosts tags (cons src srcs)))
+  (make-hostsfile lines hosts tags (hash-set srcs (string-trim src) "")))
 
 
 ;; (hostsfile-read-line hf line line-num) -> hostsfile?
@@ -260,7 +284,7 @@
   (hostsfile-lines-add lines line)
   (cond [(hostsfile-is-entry? line)
          (define host (get-host line))
-         (define host-tags (get-tags line))
+         (define host-tags (get-host-tags line))
          (make-hostsfile
           lines
           (hostsfile-hosts-add hosts host host-tags line-num)
@@ -270,7 +294,7 @@
          (make-hostsfile lines hosts tags srcs)]))
 
 
-;; (hostsfile-get-sources hf in) -> hostsfile?
+;; (hostsfile-read-sources hf in) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   in: input-port?
 ;;
@@ -282,7 +306,7 @@
          (error (error-text "expected close src"))]
         [(is-source-end? line) (hostsfile-add-line hf line) hf]
         [else
-         (hostsfile-add-source hf line)]))
+         (hostsfile-read-sources (hostsfile-add-source hf line) in)]))
 
 
 ;; (hostsfile-parse in hf) -> hostsfile?
@@ -296,7 +320,7 @@
     [(eof-object? line) hf]
     [(is-source-start? line)
      (hostsfile-add-line hf line)
-     (hostsfile-parse in (hostsfile-read-sources hf in))]
+     (hostsfile-parse in (hostsfile-read-sources hf in) line-num)]
     [else
      (hostsfile-parse
       in (hostsfile-read-line hf line line-num) (add1 line-num))]))
@@ -350,42 +374,29 @@
 
 
 
-;; (hostsfile-get-entries hf src hf-path) -> (hash?)
-;;   hf: hostsfile?
-;;   src: string?
-;;   hf-path: string?
-;;
-;; return the entries for a given source `src`
-;(define (hostsfile-get-entries hf src [hf-path "/etc/hosts"])
-;  (define hosts (hostsfile-hosts hf))
-;  (define sources (hostsfile-sources hf))
-;  (define errtxt
-;    (error-text
-;     (format "source '~a' not found in ~a" src hf-path)))
-;  (if (in-list? sources src) (void) (error errtxt))
-;  (hash-map
-;   hosts (λ (k v) (if (in-list? v src) k)))
-  ;(hash-ref srcs-hash src (λ () (error errtxt))))
+(define (hostsfile-add-new hf newsrc)
+  (define in (get-new-source newsrc))
+  (hostsfile-parse in hf 0))
 
-
-;; (list-sources srcs-hash hf-path) -> (void)
+;; (hostsfile-list-sources srcs-hash hf-path) -> (void)
 ;;   srcs-hash: hash?
 ;;   hf-path: string?
 ;;
 ;; side-effects:
 ;;   print out the sources given the sources hash
-;(define (hostsfile-list-sources srcs-hash [hf-path "/etc/hosts/"])
-;  (define sources (hostsfile-get-sources srcs-hash))
-;  (displayln (format "sources for hostfile ~a:" hf-path))
-;  (void (map (λ (x) (displayln (format  "  ~a" x))) sources)))
+(define (hostsfile-list-sources hf [hf-path "/etc/hosts/"])
+  (define sources (hostsfile-get-sources hf))
+  (displayln (format "sources for hostfile ~a:" hf-path))
+  (void (hash-map sources (λ (k v) (displayln (format  "  ~a" k)))))
+  hf)
 
 
-;; (hostsfile-get-sources srcs-hash) -> (listof string?)
-;;   srcs-hash: hash?
-;;
-;; return the sources of a sources hash
-;(define (hostsfile-get-sources srcs-hash)
-;  (hash-map srcs-hash (λ (k v) k)))
+;; (hostsfile-get-by-tag hf tag) -> (listof string?)
+;;   hf: hostsfile?
+;;   tag: string?
+;(define (hostsfile-get-by-tag hf tag)
+
+
 
 
 ;; (hostsfile-remove-source hf src) -> hostsfile?
@@ -396,4 +407,6 @@
 ;;       position in entries
 (define (hostsfile-remove-source hf src)
   (void))
+
+
 

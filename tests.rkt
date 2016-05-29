@@ -20,7 +20,8 @@
   '( "# this is a sample hostsfile produced by hostblocker"
      "# this is a comment"
      "#! hostblocker srcs:"
-     "  http://adaway.org/hosts.txt"
+     "http://adaway.org/hosts.txt"
+     "/home/fred/downloads/hosts"
      "#! end srcs"
      ""
      "0.0.0.0 ad-g.doubleclick.net       #! ads crap"
@@ -44,8 +45,11 @@
   (check-equal? (hostsfile-host-tags hf "ad-g.doubleclick.net")
                 '("ads" "crap"))
 
+
   (define tags1 (hostsfile-tag-hosts hf "ads"))
   (check-true (in-list? tags1 "adsense.com"))
+
+  (check-true (hostsfile-has-source? hf "http://adaway.org/hosts.txt"))
 
 
   )

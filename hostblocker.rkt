@@ -20,21 +20,28 @@
   (if (logging) (displayln line) (void)))
 
 
+(define (decorate hf fns)
+  (cond [(empty? fns) hf]
+        [else
+         (decorate ((first fns) hf) (rest fns))]))
+
 
 (define (main)
   (define in (open-input-file (hostsfile-path)))
   (define myhostsfile (hostsfile-parse in))
   (close-input-port in)
 
-  (map (λ (x) (x myhostsfile)) (reverse (modifiers)))
+  (define dec-hf (decorate myhostsfile (reverse (modifiers))))
 
   (cond
     [(modify?)
-     (define hostsfile-out
-       (open-output-file (hostsfile-out-path) #:exists 'replace))
-     (hostsfile-write myhostsfile hostsfile-out)
-     (close-output-port hostsfile-out)]
-    ;[(empty? (vector->list (current-command-line-arguments)))
+     ;(define hostsfile-out
+       ;(open-output-file (hostsfile-out-path) #:exists 'replace))
+     ;(hostsfile-write myhostsfile hostsfile-out)
+     ;(close-output-port hostsfile-out)]
+     ;[(empty? (vector->list (current-command-line-arguments)))
+     (void)
+     ]
     ; (hostsfile-write myhostsfile (current-output-port))]
     [else
      (void)])
@@ -63,11 +70,6 @@
 ;; logging: enable logging or verbose output
 (define logging (make-parameter #t))
 
-;; list-sources?: tell program to list all the sources found in the hosts
-;;                file specified by (hostsfile-path)
-(define list-sources? (make-parameter #f))
-
-
 
 ;; define commandline flags and options for program
 (define cmd
@@ -88,20 +90,20 @@
    ; (modify? #t)
    ; (hostsfile-out-path filename)]
 
-   ;[("-l" "--list")
-   ; "list known sources in the hostfile specified"
-   ; (define list-sources-dec
-   ;   (λ (x)
-   ;     (hostsfile-list-sources (hostsfile-sources x) (hostsfile-path))))
-   ; (modifiers
-   ;  (cons list-sources-dec (modifiers)))]
+   [("-l" "--list")
+    "list known sources in the hostfile specified"
+    (define list-sources-dec
+      (λ (x)
+        (hostsfile-list-sources x (hostsfile-path))))
+    (modifiers
+     (cons list-sources-dec (modifiers)))]
 
    #:multi
    ;[("-a" "--add-source") source
    ; "add a local or remote source: <source>"
    ; (modify? #t)
    ; (define add-source-dec
-   ;   (λ (x) (hostsfile-add-new-source x source)))
+   ;   (λ (x) (hostsfile-add-new x source)))
    ; (modifiers
    ;  (cons add-source-dec (modifiers)))]
 
@@ -112,14 +114,7 @@
    ;   (λ (x) (hostsfile-remove-source x source)))
    ; (modifiers
    ;  (cons remove-source-dec (modifiers)))]
-
-   ;[("-s" "--list-source") source
-   ; "list entries of a source: <source>"
-   ; (define list-entries-dec
-   ;   (λ (x) (hostsfile-list-entries source x (hostsfile-path))))
-   ; (modifiers
-   ;  (cons list-entries-dec (modifiers)))]))
-   ))
+))
 
 
 (main)
