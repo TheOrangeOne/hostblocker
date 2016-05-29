@@ -83,34 +83,43 @@
     "display logging info"
     (logging #t)]
 
-   [("-o" "--out") filename
-    "specify output hosts file: <filename>"
-    (modify? #t)
-    (hostsfile-out-path filename)]
+   ;[("-o" "--out") filename
+   ; "specify output hosts file: <filename>"
+   ; (modify? #t)
+   ; (hostsfile-out-path filename)]
 
-   [("-l" "--list")
-    "list known sources in the hostfile specified"
-    (define list-sources-dec
-      (λ (x)
-        (hostsfile-list-sources (hostsfile-sources x) (hostsfile-path))))
-    (modifiers
-     (cons list-sources-dec (modifiers)))]
+   ;[("-l" "--list")
+   ; "list known sources in the hostfile specified"
+   ; (define list-sources-dec
+   ;   (λ (x)
+   ;     (hostsfile-list-sources (hostsfile-sources x) (hostsfile-path))))
+   ; (modifiers
+   ;  (cons list-sources-dec (modifiers)))]
 
    #:multi
-   [("-a" "--add") source
-    "add a local or remote source: <source>"
-    (modify? #t)
-    (define add-source-dec
-      (λ (x) (hostsfile-add-new-source x source)))
-    (modifiers
-     (cons add-source-dec (modifiers)))]
+   ;[("-a" "--add-source") source
+   ; "add a local or remote source: <source>"
+   ; (modify? #t)
+   ; (define add-source-dec
+   ;   (λ (x) (hostsfile-add-new-source x source)))
+   ; (modifiers
+   ;  (cons add-source-dec (modifiers)))]
 
-   [("-s" "--list-source") source
-    "list entries of a source: <source>"
-    (define list-entries-dec
-      (λ (x) (hostsfile-list-entries source x (hostsfile-path))))
-    (modifiers
-     (cons list-entries-dec (modifiers)))]))
+   ;[("-r" "--remove-source") source
+   ; "remove a local or remote source: <source>"
+   ; (modify? #t)
+   ; (define remove-source-dec
+   ;   (λ (x) (hostsfile-remove-source x source)))
+   ; (modifiers
+   ;  (cons remove-source-dec (modifiers)))]
+
+   ;[("-s" "--list-source") source
+   ; "list entries of a source: <source>"
+   ; (define list-entries-dec
+   ;   (λ (x) (hostsfile-list-entries source x (hostsfile-path))))
+   ; (modifiers
+   ;  (cons list-entries-dec (modifiers)))]))
+   ))
 
 
 (main)

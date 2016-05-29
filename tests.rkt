@@ -2,9 +2,9 @@
 
 (require
  "lib.rkt"
+ data/gvector
  rackunit)
 
-;(require "hostblocker.rkt")
 (require "hostsfile.rkt")
 
 
@@ -19,40 +19,37 @@
 (define simple-hf-los
   '( "# this is a sample hostsfile produced by hostblocker"
      "# this is a comment"
+     "#! hostblocker srcs:"
+     "  http://adaway.org/hosts.txt"
+     "#! end srcs"
      ""
-     "#! src: http://example.com/hosts.txt"
      "0.0.0.0 ad-g.doubleclick.net       #! ads crap"
-     "0.0.0.0 adsense.com                #! ads"
-     "#! end src"))
+     "0.0.0.0 adsense.com                #! ads"))
 (define simple-hf (los->input-port simple-hf-los))
-
 
 
 (test-case
     "hostsfile-parse: simple hostsfile"
   (define hf (hostsfile-parse simple-hf))
-  (define-values (entries sources tags orig) (hostsfile-values hf))
+  (define-values (lines hosts tags sources) (hostsfile-values hf))
 
-  (check-true (hash-has-key? sources "http://example.com/hosts.txt"))
+  (check-equal? (gvector->list lines) simple-hf-los)
 
-  ;; check entries
-  (define src-entries (hostsfile-get-entries hf "http://example.com/hosts.txt"))
-  (check-true (hash-has-key? src-entries "ad-g.doubleclick.net"))
-  (check-true (hash-has-key? src-entries "adsense.com"))
+  (check-false (hostsfile-has-host? hf "facebook.com"))
+  (check-true (hostsfile-has-host? hf "adsense.com"))
+  (check-true (hostsfile-has-host? hf "ad-g.doubleclick.net"))
 
-  ;; check tags of entries
-  (check-equal? '("ads")
-                (hostsfile-source-entry-tags
-                 hf "http://example.com/hosts.txt" "adsense.com"))
+  (check-equal? (hostsfile-host-tags hf "adsense.com")
+                '("ads"))
+  (check-equal? (hostsfile-host-tags hf "ad-g.doubleclick.net")
+                '("ads" "crap"))
 
-  (check-equal? '("ads" "crap")
-                (hostsfile-source-entry-tags
-                 hf "http://example.com/hosts.txt" "ad-g.doubleclick.net"))
+  (define tags1 (hostsfile-tag-hosts hf "ads"))
+  (check-true (in-list? tags1 "adsense.com"))
 
-  ;; check tags
-  (check-true (hostsfile-has-tag? hf "crap"))
-  (check-true (hostsfile-has-tag? hf "ads"))
+
   )
+
 
 
 
@@ -73,40 +70,3 @@
      "#! end src"))
 (define multiple-srcs-hf (los->input-port multiple-srcs-hf-los))
 
-
-(test-case
-    "hostsfile-parse multiple sources hostsfile"
-  (define hf (hostsfile-parse multiple-srcs-hf))
-  (define-values (entries sources tags orig) (hostsfile-values hf))
-
-  (check-true (hash-has-key? sources "http://example.com/hosts.txt"))
-  (check-true (hash-has-key? sources "/home/user/myhostsfile"))
-
-  ;; check entries
-
-  (define src1-entries
-    (hostsfile-get-entries hf "http://example.com/hosts.txt"))
-
-  (check-true (hash-has-key? src1-entries "ad-g.doubleclick.net"))
-  (check-true (hash-has-key? src1-entries "adsense.com"))
-
-  (define src2-entries
-    (hostsfile-get-entries hf "/home/user/myhostsfile"))
-  (check-true (hash-has-key? src2-entries "facebook.com"))
-  (check-true (hash-has-key? src2-entries "twitter.com"))
-  (check-true (hash-has-key? src2-entries "reddit.com"))
-
-
-  ;; check tags of entries
-  (check-equal? '("ads" "crap")
-                (hostsfile-source-entry-tags
-                 hf "http://example.com/hosts.txt" "ad-g.doubleclick.net"))
-  (check-equal? '("ads")
-                (hostsfile-source-entry-tags
-                 hf "http://example.com/hosts.txt" "adsense.com"))
-
-
-  ;; check tags
-  (check-true (hostsfile-has-tag? hf "crap"))
-  (check-true (hostsfile-has-tag? hf "ads"))
-  )

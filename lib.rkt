@@ -46,9 +46,9 @@
   (open-input-string (string-join los "\n")))
 
 
-;; (in-list? val lst) -> boolean?
-;;   val: any?
+;; (in-list? lst val) -> boolean?
 ;;   lst: list?
+;;   val: any?
 ;; return true if val is in lst
-(define (in-list? val lst)
+(define (in-list? lst val)
   (if (list-index (curry equal? val) lst) #t #f))
