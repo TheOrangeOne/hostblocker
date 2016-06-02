@@ -33,16 +33,15 @@
 
   (define dec-hf (decorate myhostsfile (reverse (modifiers))))
 
+
   (cond
     [(modify?)
-     ;(define hostsfile-out
-       ;(open-output-file (hostsfile-out-path) #:exists 'replace))
-     ;(hostsfile-write myhostsfile hostsfile-out)
-     ;(close-output-port hostsfile-out)]
-     ;[(empty? (vector->list (current-command-line-arguments)))
-     (void)
-     ]
-    ; (hostsfile-write myhostsfile (current-output-port))]
+     (define hostsfile-out
+       (open-output-file (hostsfile-out-path) #:exists 'replace))
+     (hostsfile-write myhostsfile hostsfile-out)
+     (close-output-port hostsfile-out)]
+    [(empty? (vector->list (current-command-line-arguments)))
+     (hostsfile-write myhostsfile (current-output-port))]
     [else
      (void)])
   (void))
@@ -89,7 +88,7 @@
    ; "specify output hosts file: <filename>"
    ; (modify? #t)
    ; (hostsfile-out-path filename)]
-
+   #:multi
    [("-l" "--list")
     "list known sources in the hostfile specified"
     (define list-sources-dec
@@ -97,15 +96,13 @@
         (hostsfile-list-sources x (hostsfile-path))))
     (modifiers
      (cons list-sources-dec (modifiers)))]
-
-   #:multi
-   ;[("-a" "--add-source") source
-   ; "add a local or remote source: <source>"
-   ; (modify? #t)
-   ; (define add-source-dec
-   ;   (λ (x) (hostsfile-add-new x source)))
-   ; (modifiers
-   ;  (cons add-source-dec (modifiers)))]
+   [("-a" "--add-source") source
+    "add a local or remote source: <source>"
+    (modify? #t)
+    (define add-source-dec
+      (λ (x) (hostsfile-add-new x source)))
+    (modifiers
+     (cons add-source-dec (modifiers)))]
 
    ;[("-r" "--remove-source") source
    ; "remove a local or remote source: <source>"

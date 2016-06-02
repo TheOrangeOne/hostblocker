@@ -27,10 +27,10 @@
 ;; objects, this gives us constant time lookups of hosts' tags and position
 ;;
 ;; `tags` is a hash mapping between a tag and each host that has that tag
-(define-struct hostsfile (lines hosts tags sources))
+(define-struct hostsfile (lines hosts tags sources size))
 
 ;; TODO: definition
-(define-struct hostsfile-entry (tags position))
+(define-struct hostsfile-entry (tags position) #:transparent)
 
 
 (define default-hosts "/etc/hosts")
@@ -40,7 +40,7 @@
 (define (make-empty-hostsfile)
   (make-hostsfile
    (make-gvector)
-   (make-immutable-hash) (make-immutable-hash) (make-immutable-hash)))
+   (make-immutable-hash) (make-immutable-hash) (make-immutable-hash) 0))
 
 
 ;; (hostsfile-values hf) -> gvector? hash? hash?
@@ -51,7 +51,8 @@
   (values (hostsfile-lines   hf)
           (hostsfile-hosts   hf)
           (hostsfile-tags    hf)
-          (hostsfile-sources hf)))
+          (hostsfile-sources hf)
+          (hostsfile-size    hf)))
 
 
 ;; (hostsfile-get-host hf host hf-path) -> hostsfile-entry?
@@ -166,8 +167,13 @@
 ;; may not be required, have to look up valid entries in hostsfile
 (define tag-matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*\\#!.*"))
 (define matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*"))
+(define (hostsfile-is-proper-entry? line)
+  (regexp-match? tag-matcher line))
+
 (define (hostsfile-is-entry? line)
-  (or (regexp-match? tag-matcher line) (regexp-match? matcher line)))
+  (regexp-match? matcher line))
+
+
   ;(and (not (string=? line ""))  (not (char=? (string-ref line 0) #\#))))
 
 
@@ -260,38 +266,56 @@
           host (rest lst))]))
 
 
-;; (hostsfile-add-source lines line) -> hostsfile?
+;; (hostsfile-add-source hf src) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   src: string?
 (define (hostsfile-add-source hf src)
-  (define-values (lines hosts tags srcs) (hostsfile-values hf))
-  (hostsfile-add-line hf src)
-  (make-hostsfile lines hosts tags (hash-set srcs (string-trim src) "")))
+  (define-values (lines hosts tags srcs size) (hostsfile-values hf))
+  ;(hostsfile-add-line hf src)
+  (make-hostsfile lines hosts tags (hash-set srcs src "") (add1 size)))
 
 
-;; (hostsfile-read-line hf line line-num) -> hostsfile?
+(define (sanitize-line line [newsrc ""])
+  (define host (second (string-split line)))
+  (get-line host (list newsrc)))
+
+
+;; (hostsfile-read-line hf line) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   line: (or hash? string?)
-;;   line-num: non-negative-integer?
+;;   newsrc: string? = ""
 ;;
 ;; given a line from a hostsfile determine if it is a valid entry that we
 ;; want to keep track of
 ;; if `line` is a valid entry as defined by (hostsfile-is-entry?) we return
 ;; a new hostsfile with the entry added to lines, hosts and tags
 ;; else we just add the line to lines
-(define (hostsfile-read-line hf line line-num)
-  (define-values (lines hosts tags srcs) (hostsfile-values hf))
-  (hostsfile-lines-add lines line)
-  (cond [(hostsfile-is-entry? line)
+(define (hostsfile-read-line hf line [newsrc ""])
+  (define-values (lines hosts tags srcs size) (hostsfile-values hf))
+  (cond [(hostsfile-is-proper-entry? line)
+         (hostsfile-lines-add lines line)
          (define host (get-host line))
          (define host-tags (get-host-tags line))
          (make-hostsfile
           lines
-          (hostsfile-hosts-add hosts host host-tags line-num)
+          (hostsfile-hosts-add hosts host host-tags size)
           (hostsfile-tags-add tags host host-tags)
-          srcs)]
+          srcs
+          (add1 size))]
+        [(hostsfile-is-entry? line)
+         (define sline (sanitize-line line newsrc))
+         (hostsfile-lines-add lines sline)
+         (define host (get-host sline))
+         (define host-tags (get-host-tags sline))
+         (make-hostsfile
+          lines
+          (hostsfile-hosts-add hosts host host-tags size)
+          (hostsfile-tags-add tags host host-tags)
+          srcs
+          (add1 size))]
         [else
-         (make-hostsfile lines hosts tags srcs)]))
+         (hostsfile-lines-add lines line)
+         (make-hostsfile lines hosts tags srcs (add1 size))]))
 
 
 ;; (hostsfile-read-sources hf in) -> hostsfile?
@@ -306,24 +330,25 @@
          (error (error-text "expected close src"))]
         [(is-source-end? line) (hostsfile-add-line hf line) hf]
         [else
-         (hostsfile-read-sources (hostsfile-add-source hf line) in)]))
+         (define source (second (string-split line)))
+         (hostsfile-read-sources (hostsfile-add-source hf source) in)]))
 
 
-;; (hostsfile-parse in hf) -> hostsfile?
+;; (hostsfile-parse in hf newsrc) -> hostsfile?
 ;;   in: input-port?
 ;;   hf: hostsfile?
 ;;
 ;; given an input port produce a hostfile
-(define (hostsfile-parse in [hf (make-empty-hostsfile)] [line-num 0])
+(define (hostsfile-parse in [hf (make-empty-hostsfile)] [newsrc ""])
   (define line (read-line in))
   (cond
     [(eof-object? line) hf]
     [(is-source-start? line)
      (hostsfile-add-line hf line)
-     (hostsfile-parse in (hostsfile-read-sources hf in) line-num)]
+     (hostsfile-parse in (hostsfile-read-sources hf in) newsrc)]
     [else
      (hostsfile-parse
-      in (hostsfile-read-line hf line line-num) (add1 line-num))]))
+      in (hostsfile-read-line hf line newsrc) newsrc)]))
 
 
 ;; (get-line k v) -> string?
@@ -338,7 +363,7 @@
   (define host (format "0.0.0.0 ~a" k))
   (define len (string-length host))
   (define fmt (~a host #:min-width 90))
-  (format "~a#!~a~a~n" fmt (if (empty? v) "" " ") (string-join v)))
+  (format "~a#!~a~a" fmt (if (empty? v) "" " ") (string-join v)))
 
 
 ;; (hostsfile-print-entry out entry) -> void?
@@ -346,8 +371,13 @@
 ;;   entry: (or hostsfile-source? string?)
 ;;
 ;; output a hostsfile entry to output-port `out`
-(define (hostsfile-print-entry out line)
-  (fprintf out (format "~a~n" line)))
+(define (hostsfile-print-entry out hf line)
+  (cond [(is-source-start? line)
+         (define sources (hostsfile-sources hf))
+         (fprintf out (format "~a~n" line))
+         (hash-map sources (λ (k v) (fprintf out (format "~a~n" k))))]
+        [else
+         (fprintf out (format "~a~n" line))]))
 
 
 ;; (hostsfile-write hf out) -> void?
@@ -357,7 +387,7 @@
 ;; write out hostsfile to `out`
 (define (hostsfile-write hf out)
   (define lines (gvector->list (hostsfile-lines hf)))
-  (map (curry hostsfile-print-entry out) lines))
+  (map (curry (curry hostsfile-print-entry out) hf) lines))
 
 
 ;; (hostsfile-list-hosts src hf hf-path) -> (void)
@@ -373,10 +403,10 @@
   (void (map (λ (x) (displayln (format  "  ~a" x))) entries)))
 
 
-
 (define (hostsfile-add-new hf newsrc)
   (define in (get-new-source newsrc))
-  (hostsfile-parse in hf 0))
+  (hostsfile-parse in (hostsfile-add-source hf newsrc) newsrc))
+
 
 ;; (hostsfile-list-sources srcs-hash hf-path) -> (void)
 ;;   srcs-hash: hash?
@@ -407,6 +437,3 @@
 ;;       position in entries
 (define (hostsfile-remove-source hf src)
   (void))
-
-
-
