@@ -15,6 +15,7 @@
 ;;   entries: (gvector-of string?)
 ;;   hosts: hash?
 ;;   tags: hash?
+;;   size: non-negative-integer?
 ;;
 ;; we wish to maintain the ordering of entries within the hostsfile in case
 ;; there are manually added entries which the user would not like us to mess
@@ -83,6 +84,19 @@
     (error-text
      (format "tag '~a' not used by any entries in ~a" tag hf-path)))
   (hash-ref (hostsfile-tags hf) tag (λ () (error errtxt))))
+
+
+;; (hostsfile-get-tags hf) -> hash?
+;;   hf: hostsfile?
+(define (hostsfile-get-tags hf)
+  (hostsfile-tags hf))
+
+
+;; (hostsfile-get-tags-los hf) -> (listof string?)
+;;   hf: hostsfile?
+(define (hostsfile-get-tags-los hf)
+  (define tags (hostsfile-get-tags hf))
+  (hash-map tags (λ (k v) k)))
 
 
 ;; (hostsfile-get-entries-los src hf hf-path) -> (listof string?)
@@ -392,13 +406,18 @@
 ;;   src: string?
 ;;   hf: hostsfile?
 ;;   hf-path: string?
+;;   out: output-port?
 ;;
 ;; side-effects:
 ;;   output the hosts in the given hostsfile
-(define (hostsfile-list-hosts src hf hf-path)
+(define (hostsfile-list-hosts src hf hf-path out)
   (define entries (hostsfile-get-hosts-los src hf [hf-path "/etc/hosts"]))
   (displayln (format "hosts in ~a:" hf-path))
-  (void (map (λ (x) (displayln (format  "  ~a" x))) entries)))
+  (void (map (λ (x) (fprintf out (format  "  ~a" x))) entries)))
+
+
+;; (hostsfile-list-tags hf hf-path) -> (void)
+;;   hf: hostsfile
 
 
 (define (hostsfile-add-new hf newsrc)
@@ -408,25 +427,30 @@
       (hostsfile-parse in (hostsfile-add-source hf newsrc) newsrc)))
 
 
-;; (hostsfile-list-sources srcs-hash hf-path) -> (void)
+;; (hostsfile-list-sources srcs-hash hf-path out) -> hostsfile?
 ;;   srcs-hash: hash?
 ;;   hf-path: string?
+;;   out: output-port?
 ;;
 ;; side-effects:
-;;   print out the sources given the sources hash
-(define (hostsfile-list-sources hf [hf-path "/etc/hosts/"])
+;;   print the sources of the given sources hash to `out`
+(define (hostsfile-list-sources hf out [hf-path "/etc/hosts/"])
   (define sources (hostsfile-get-sources hf))
-  (displayln (format "sources for hostfile ~a:" hf-path))
-  (void (hash-map sources (λ (k v) (displayln (format  "  ~a" k)))))
+  (fprintf out (format "sources for hostfile ~a:~n" hf-path))
+  (void (hash-map sources (λ (k v) (fprintf out (format  "  ~a~n" k)))))
   hf)
 
 
-;; (hostsfile-get-by-tag hf tag) -> (listof string?)
+;; (hostsfile-list-tags hf out) -> hostsfile?
 ;;   hf: hostsfile?
-;;   tag: string?
-;(define (hostsfile-get-by-tag hf tag)
-
-
+;;   out: output-port?
+;;
+;; print all the tags given a hostsfile to `out`
+(define (hostsfile-list-tags hf out [hf-path "/etc/hosts/"])
+  (define tags (hostsfile-get-tags hf))
+  (fprintf out (format "tags for hostfile ~a:~n" hf-path))
+  (void (hash-map tags (λ (k v) (fprintf out (format  "  ~a~n" k)))))
+  hf)
 
 
 ;; (hostsfile-remove-source hf src) -> hostsfile?

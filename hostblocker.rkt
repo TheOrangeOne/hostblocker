@@ -69,6 +69,9 @@
 (define logging (make-parameter #t))
 
 
+(define (add-modifier mod mods)
+  (cons mod mods))
+
 ;; define commandline flags and options for program
 (define cmd
   (command-line
@@ -92,16 +95,21 @@
     "list known sources in the hostfile specified"
     (define list-sources-dec
       (λ (x)
-        (hostsfile-list-sources x (hostsfile-path))))
-    (modifiers
-     (cons list-sources-dec (modifiers)))]
+        (hostsfile-list-sources
+         x (current-output-port) (hostsfile-path))))
+    (modifiers (add-modifier list-sources-dec (modifiers)))]
+   [("-t" "--tags")
+    "list all the tags in the hostfile specified"
+    (define list-tags-dec
+      (λ (x)
+        (hostsfile-list-tags x (current-output-port) (hostsfile-path))))
+    (modifiers (add-modifier list-tags-dec (modifiers)))]
    [("-a" "--add-source") source
     "add a local or remote source: <source>"
     (modify? #t)
     (define add-source-dec
       (λ (x) (hostsfile-add-new x source)))
-    (modifiers
-     (cons add-source-dec (modifiers)))]
+    (modifiers (add-modifier add-source-dec (modifiers)))]
 
    ;[("-r" "--remove-source") source
    ; "remove a local or remote source: <source>"
