@@ -33,12 +33,11 @@
 
   (define dec-hf (decorate myhostsfile (reverse (modifiers))))
 
-
   (cond
     [(modify?)
      (define hostsfile-out
        (open-output-file (hostsfile-out-path) #:exists 'replace))
-     (hostsfile-write myhostsfile hostsfile-out)
+     (hostsfile-write dec-hf hostsfile-out)
      (close-output-port hostsfile-out)]
     [(empty? (vector->list (current-command-line-arguments)))
      (hostsfile-write myhostsfile (current-output-port))]

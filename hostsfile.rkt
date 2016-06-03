@@ -328,7 +328,7 @@
   (define line (read-line in))
   (cond [(eof-object? line)
          (error (error-text "expected close src"))]
-        [(is-source-end? line) (hostsfile-add-line hf line) hf]
+        [(is-source-end? line) hf]
         [else
          (define source (second (string-split line)))
          (hostsfile-read-sources (hostsfile-add-source hf source) in)]))
@@ -344,7 +344,6 @@
   (cond
     [(eof-object? line) hf]
     [(is-source-start? line)
-     (hostsfile-add-line hf line)
      (hostsfile-parse in (hostsfile-read-sources hf in) newsrc)]
     [else
      (hostsfile-parse
@@ -371,13 +370,8 @@
 ;;   entry: (or hostsfile-source? string?)
 ;;
 ;; output a hostsfile entry to output-port `out`
-(define (hostsfile-print-entry out hf line)
-  (cond [(is-source-start? line)
-         (define sources (hostsfile-sources hf))
-         (fprintf out (format "~a~n" line))
-         (hash-map sources (λ (k v) (fprintf out (format "~a~n" k))))]
-        [else
-         (fprintf out (format "~a~n" line))]))
+(define (hostsfile-print-entry out line)
+  (fprintf out (format "~a~n" line)))
 
 
 ;; (hostsfile-write hf out) -> void?
@@ -387,7 +381,11 @@
 ;; write out hostsfile to `out`
 (define (hostsfile-write hf out)
   (define lines (gvector->list (hostsfile-lines hf)))
-  (map (curry (curry hostsfile-print-entry out) hf) lines))
+  (define sources (hostsfile-sources hf))
+  (fprintf out "#! hostblocker srcs:~n")
+  (hash-map sources (λ (k v) (fprintf out (format "#!  ~a~n" k))))
+  (fprintf out "#! end srcs~n")
+  (map (curry hostsfile-print-entry out) lines))
 
 
 ;; (hostsfile-list-hosts src hf hf-path) -> (void)
@@ -405,7 +403,9 @@
 
 (define (hostsfile-add-new hf newsrc)
   (define in (get-new-source newsrc))
-  (hostsfile-parse in (hostsfile-add-source hf newsrc) newsrc))
+  (if (hostsfile-has-source? hf newsrc)
+      (error (error-text (format "source '~a' already exists" newsrc)))
+      (hostsfile-parse in (hostsfile-add-source hf newsrc) newsrc)))
 
 
 ;; (hostsfile-list-sources srcs-hash hf-path) -> (void)
