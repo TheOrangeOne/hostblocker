@@ -98,9 +98,7 @@
 (define (hostsfile-remove-host hf host [hf-path default-hosts])
   (define-values (lines hosts tags srcs size) (hostsfile-values hf))
   (make-hostsfile
-   lines
-   (hash-remove (hostsfile-hosts hf) host)
-   tags srcs size))
+   lines (hash-remove (hostsfile-hosts hf) host) tags srcs size))
 
 
 ;; (hostsfile-tag-hosts hf tag hf-path) -> (listof string?)
@@ -118,6 +116,15 @@
 ;;   hf: hostsfile?
 (define (hostsfile-get-tags hf)
   (hostsfile-tags hf))
+
+
+;; (hostsfile-remove-tag hf tag) -> hostsfile?
+;;   hf: hostsfile?
+;;   tag: string?
+(define (hostsfile-remove-tag hf tag [hf-path default-hosts])
+  (define-values (lines hosts tags srcs size) (hostsfile-values hf))
+  (make-hostsfile
+   lines hosts (hash-remove (hostsfile-tags hf) tag) srcs size))
 
 
 ;; (hostsfile-get-tags-los hf) -> (listof string?)
@@ -453,7 +460,7 @@
 
 ;; (hostsfile-list-hosts src hf hf-path) -> (void)
 ;;   src: string?
-;;   hf: hostsfile?
+;;   hf-path: string? = default-hosts
 ;;   hf-path: string?
 ;;   out: output-port?
 ;;
@@ -467,7 +474,7 @@
 
 ;; (hostsfile-list-sources srcs-hash hf-path out) -> hostsfile?
 ;;   srcs-hash: hash?
-;;   hf-path: string?
+;;   hf-path: string? = default-hosts
 ;;   out: output-port?
 ;;
 ;; side-effects:
@@ -508,6 +515,7 @@
 ;; (hostsfile-remove-source hf src) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   src: string?
+;;   hf-path: string? = default-hosts
 ;;
 ;; removes a source from a hostsfile
 (define (hostsfile-remove-source hf src [hf-path default-hosts])
@@ -518,4 +526,24 @@
   (if (hostsfile-has-source? hf src) (void) (error errtxt))
   (define tag-hosts (hostsfile-tag-hosts hf src))
   (define hosts (hostsfile-get-hosts hf))
-  (remove-hosts hf tag-hosts))
+  (define hf-rm-hosts (remove-hosts hf tag-hosts))
+  (define hf-rm-tag (hostsfile-remove-tag hf src))
+  hf-rm-tag)
+
+
+;; (hostsfile-remove-by-tag hf tag) -> hostsfile?
+;;   hf: hostsfile?
+;;   tag: string?
+;;   hf-path: string? = default-hosts
+;;
+;; removes all hosts with tag `tag`
+(define (hostsfile-remove-by-tag hf tag [hf-path default-hosts])
+  (define errtxt
+    (error-text
+     (format "to delete a source use the -r flag")))
+  (if (hostsfile-has-source? hf tag) (error errtxt) (void))
+  (define tag-hosts (hostsfile-tag-hosts hf tag))
+  (define hosts (hostsfile-get-hosts hf))
+  (define hf-rm-hosts (remove-hosts hf tag-hosts))
+  (define hf-rm-tag (hostsfile-remove-tag hf tag))
+  hf-rm-tag)
