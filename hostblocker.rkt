@@ -86,10 +86,10 @@
     "display logging info"
     (logging #t)]
 
-   ;[("-o" "--out") filename
-   ; "specify output hosts file: <filename>"
-   ; (modify? #t)
-   ; (hostsfile-out-path filename)]
+   [("-o" "--out") filename
+    "specify output hosts file: <filename>"
+    (modify? #t)
+    (hostsfile-out-path filename)]
    #:multi
    [("-l" "--list")
     "list known sources in the hostfile specified"
@@ -111,13 +111,12 @@
       (λ (x) (hostsfile-add-new x source)))
     (modifiers (add-modifier add-source-dec (modifiers)))]
 
-   ;[("-r" "--remove-source") source
-   ; "remove a local or remote source: <source>"
-   ; (modify? #t)
-   ; (define remove-source-dec
-   ;   (λ (x) (hostsfile-remove-source x source)))
-   ; (modifiers
-   ;  (cons remove-source-dec (modifiers)))]
+   [("-r" "--remove-source") source
+    "remove a local or remote source: <source>"
+    (modify? #t)
+    (define remove-source-dec
+      (λ (x) (hostsfile-remove-source x source (hostsfile-path))))
+    (modifiers (add-modifier remove-source-dec (modifiers)))]
 ))
 
 

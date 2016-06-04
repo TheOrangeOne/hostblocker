@@ -31,10 +31,16 @@
 (define-struct hostsfile (lines hosts tags sources size))
 
 ;; TODO: definition
-(define-struct hostsfile-entry (tags position) #:transparent)
+(define-struct hostsfile-entry (tags pos) #:transparent)
 
 
 (define default-hosts "/etc/hosts")
+
+
+(define (is-NULL? line)
+  (define NULL-LINE "#! NULL")
+  (equal? line NULL-LINE))
+
 
 ;; (make-empty-hostsfile) -> hostsfile?
 ;; create an empty hostsfile
@@ -56,6 +62,17 @@
           (hostsfile-size    hf)))
 
 
+;; (hostsfile-remove-line hf line-num) -> hostsfile?
+;;   hf: hostsfile?
+;;   line-num: non-negative-integer?
+;;
+;; "removes" a line from lines by setting it to the NULL-LINE
+(define (hostsfile-remove-line hf line-num)
+  (define lines (hostsfile-lines hf))
+  (gvector-set! lines line-num "#! NULL")
+  hf)
+
+
 ;; (hostsfile-get-host hf host hf-path) -> hostsfile-entry?
 ;;   hf: hostsfile?
 ;;   host: string?
@@ -73,6 +90,17 @@
 ;;   hf-path: string? = default-hosts
 (define (hostsfile-host-tags hf host [hf-path default-hosts])
   (hostsfile-entry-tags (hostsfile-get-host hf host hf-path)))
+
+
+;; (hostsfile-remove-host hf host) -> hostsfile?
+;;   hf: hostsfile?
+;;   host: string?
+(define (hostsfile-remove-host hf host [hf-path default-hosts])
+  (define-values (lines hosts tags srcs size) (hostsfile-values hf))
+  (make-hostsfile
+   lines
+   (hash-remove (hostsfile-hosts hf) host)
+   tags srcs size))
 
 
 ;; (hostsfile-tag-hosts hf tag hf-path) -> (listof string?)
@@ -99,12 +127,19 @@
   (hash-map tags (λ (k v) k)))
 
 
-;; (hostsfile-get-entries-los src hf hf-path) -> (listof string?)
+;; (hostsfile-get-hosts src hf hf-path) -> hash?
+;;   hf: hostsfile?
+;;   hf-path: string?
+(define (hostsfile-get-hosts hf [hf-path "/etc/hosts"])
+   (hostsfile-hosts hf))
+
+
+;; (hostsfile-get-hosts-los src hf hf-path) -> (listof string?)
 ;;   src: string?
 ;;   hf: hostsfile?
 ;;   hf-path: string?
 (define (hostsfile-get-hosts-los hf [hf-path "/etc/hosts"])
-  (define hosts (hostsfile-hosts hf))
+  (define hosts (hostsfile-get-hosts hf))
   (hash-map hosts (λ (k v) k)))
 
 
@@ -285,8 +320,7 @@
 ;;   src: string?
 (define (hostsfile-add-source hf src)
   (define-values (lines hosts tags srcs size) (hostsfile-values hf))
-  ;(hostsfile-add-line hf src)
-  (make-hostsfile lines hosts tags (hash-set srcs src "") (add1 size)))
+  (make-hostsfile lines hosts tags (hash-set srcs src "")  size))
 
 
 (define (sanitize-line line [newsrc ""])
@@ -385,7 +419,9 @@
 ;;
 ;; output a hostsfile entry to output-port `out`
 (define (hostsfile-print-entry out line)
-  (fprintf out (format "~a~n" line)))
+  (if (is-NULL? line)
+      (void)
+      (fprintf out (format "~a~n" line))))
 
 
 ;; (hostsfile-write hf out) -> void?
@@ -402,6 +438,19 @@
   (map (curry hostsfile-print-entry out) lines))
 
 
+;; (hostsfile-add-new hf newsrc) -> hostsfile?
+;;   hf: hostsfile?
+;;   newsrc: string?
+;;
+;; add a new source to a given hostsfile, that is, create an entry in the
+;; sources hash for `newsrc` and add it's entries to lines
+(define (hostsfile-add-new hf newsrc)
+  (define in (get-new-source newsrc))
+  (if (hostsfile-has-source? hf newsrc)
+      (error (error-text (format "source '~a' already exists" newsrc)))
+      (hostsfile-parse in (hostsfile-add-source hf newsrc) newsrc)))
+
+
 ;; (hostsfile-list-hosts src hf hf-path) -> (void)
 ;;   src: string?
 ;;   hf: hostsfile?
@@ -411,20 +460,9 @@
 ;; side-effects:
 ;;   output the hosts in the given hostsfile
 (define (hostsfile-list-hosts src hf hf-path out)
-  (define entries (hostsfile-get-hosts-los src hf [hf-path "/etc/hosts"]))
+  (define entries (hostsfile-get-hosts-los src hf [hf-path default-hosts]))
   (displayln (format "hosts in ~a:" hf-path))
   (void (map (λ (x) (fprintf out (format  "  ~a" x))) entries)))
-
-
-;; (hostsfile-list-tags hf hf-path) -> (void)
-;;   hf: hostsfile
-
-
-(define (hostsfile-add-new hf newsrc)
-  (define in (get-new-source newsrc))
-  (if (hostsfile-has-source? hf newsrc)
-      (error (error-text (format "source '~a' already exists" newsrc)))
-      (hostsfile-parse in (hostsfile-add-source hf newsrc) newsrc)))
 
 
 ;; (hostsfile-list-sources srcs-hash hf-path out) -> hostsfile?
@@ -434,7 +472,7 @@
 ;;
 ;; side-effects:
 ;;   print the sources of the given sources hash to `out`
-(define (hostsfile-list-sources hf out [hf-path "/etc/hosts/"])
+(define (hostsfile-list-sources hf out [hf-path default-hosts])
   (define sources (hostsfile-get-sources hf))
   (fprintf out (format "sources for hostfile ~a:~n" hf-path))
   (void (hash-map sources (λ (k v) (fprintf out (format  "  ~a~n" k)))))
@@ -446,18 +484,38 @@
 ;;   out: output-port?
 ;;
 ;; print all the tags given a hostsfile to `out`
-(define (hostsfile-list-tags hf out [hf-path "/etc/hosts/"])
+(define (hostsfile-list-tags hf out [hf-path default-hosts])
   (define tags (hostsfile-get-tags hf))
   (fprintf out (format "tags for hostfile ~a:~n" hf-path))
   (void (hash-map tags (λ (k v) (fprintf out (format  "  ~a~n" k)))))
   hf)
 
 
+(define (remove-host hf host)
+  (define lines (hostsfile-lines hf))
+  (define hosts (hostsfile-hosts hf))
+  (define line-num (hostsfile-entry-pos (hash-ref hosts host)))
+  (define hf-rm-line (hostsfile-remove-line hf line-num))
+  (hostsfile-remove-host hf-rm-line host))
+
+
+(define (remove-hosts hf hosts)
+  (cond [(empty? hosts) hf]
+        [else
+         (remove-hosts (remove-host hf (first hosts)) (rest hosts))]))
+
+
 ;; (hostsfile-remove-source hf src) -> hostsfile?
 ;;   hf: hostsfile?
 ;;   src: string?
 ;;
-;; TODO: make constant time by keeping track of
-;;       position in entries
-(define (hostsfile-remove-source hf src)
-  (void))
+;; removes a source from a hostsfile
+(define (hostsfile-remove-source hf src [hf-path default-hosts])
+  (define errtxt
+    (error-text
+     (format "source '~a' not found in ~a -- did you mean to specify a tag?"
+             src hf-path)))
+  (if (hostsfile-has-source? hf src) (void) (error errtxt))
+  (define tag-hosts (hostsfile-tag-hosts hf src))
+  (define hosts (hostsfile-get-hosts hf))
+  (remove-hosts hf tag-hosts))
