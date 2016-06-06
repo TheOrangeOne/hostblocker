@@ -164,7 +164,10 @@
     resp))
 
 
-;; TODO: document or clean up
+;; (get-local-hostsfile path) -> input-port?
+;;   path: string?
+;;
+;; open a local hostsfile for reading
 (define (get-local-hostsfile path)
   (with-handlers
     ([(λ (x) #t)
@@ -174,13 +177,18 @@
     (open-input-file path)))
 
 
-;; TODO: document or clean up
+;; (get-new-source src-file) -> input-port?
+;;   src-file: string?
+;;
+;; decide whether a given file is a local or remote file and call the
+;; corresponding function to open it
 (define (get-new-source src-file)
   (if (regexp-match? lib-url-regex src-file)
       (get-remote-hostsfile src-file)
       (get-local-hostsfile src-file)))
 
 
+;; (get-host-tags line) -> (listof string?)
 (define (get-host-tags line)
   (if (string-contains? line "#!")
       (string-split (second (regexp-split "\\#!" line)))
@@ -216,21 +224,18 @@
 ;; (hostsfile-is-entry? line) -> boolean?
 ;;   line: string?
 ;;
-;; determines if the given line is a valid entry
-;; that is, does not start with '#'
-;; TODO: pattern match to only match lines of form
-;;        XXXX.XXXX.XXXX.XXXX <URL>
-;; may not be required, have to look up valid entries in hostsfile
+;; determines if the given line is a valid proper entry that is, an ip
+;; address followed by a hostname followed eventually by a hostblocker
+;; group of tags prepended with '#!'
 (define tag-matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*\\#!.*"))
-(define matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*"))
 (define (hostsfile-is-proper-entry? line)
   (regexp-match? tag-matcher line))
 
+
+;; TODO find out how to match arbitrary whitespace
+(define matcher (regexp "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+ [A-z]+$"))
 (define (hostsfile-is-entry? line)
   (regexp-match? matcher line))
-
-
-  ;(and (not (string=? line ""))  (not (char=? (string-ref line 0) #\#))))
 
 
 (define (is-source-start? line)

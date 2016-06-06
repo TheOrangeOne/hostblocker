@@ -81,11 +81,9 @@
     "specify hosts file to use: <filename>"
     (hostsfile-path filename)
     (hostsfile-out-path (hostsfile-path))]
-
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
-
    [("-o" "--out") filename
     "specify output hosts file: <filename>"
     (modify? #t)
