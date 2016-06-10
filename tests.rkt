@@ -22,8 +22,11 @@
      "#!  /home/fred/downloads/hosts"
      "#! end srcs"
      "# this is a sample hostsfile produced by hostblocker"
-     "# this is a comment"
+     "# this is a localhost entry -- we don't want to mess with it"
+     "127.0.0.1 localhost local.host orange"
      ""
+     "     "
+     "# this is a comment"
      "0.0.0.0 ad-g.doubleclick.net       #! ads crap"
      "0.0.0.0 adsense.com                #! ads"))
 (define simple-hf (los->input-port simple-hf-los))
@@ -33,8 +36,6 @@
     "hostsfile-parse: simple hostsfile"
   (define hf (hostsfile-parse simple-hf))
   (define-values (lines hosts tags sources numline) (hostsfile-values hf))
-
-  ;(check-equal? (gvector->list lines) simple-hf-los)
 
   (check-false (hostsfile-has-host? hf "facebook.com"))
   (check-true (hostsfile-has-host? hf "adsense.com"))
@@ -48,29 +49,13 @@
 
   (define tags1 (hostsfile-tag-hosts hf "ads"))
   (check-true (in-list? tags1 "adsense.com"))
+  (check-true (in-list? tags1 "ad-g.doubleclick.net"))
+
+  (define tags2 (hostsfile-tag-hosts hf "crap"))
+  (check-true (in-list? tags2 "ad-g.doubleclick.net"))
 
   (check-true (hostsfile-has-source? hf "http://adaway.org/hosts.txt"))
+  (check-true (hostsfile-has-source? hf "/home/fred/downloads/hosts"))
 
 
   )
-
-
-
-
-
-(define multiple-srcs-hf-los
-  '( "#! src: http://example.com/hosts.txt"
-     "0.0.0.0 ad-g.doubleclick.net       #! ads crap"
-     "0.0.0.0 adsense.com                #! ads"
-     "#! end src"
-     ""
-     " "
-     "127.0.0.1 localhost"
-     "             "
-     "#! src: /home/user/myhostsfile"
-     "0.0.0.0 facebook.com               #! garbage crap"
-     "0.0.0.0 twitter.com                #! useless trash"
-     "0.0.0.0 reddit.com"
-     "#! end src"))
-(define multiple-srcs-hf (los->input-port multiple-srcs-hf-los))
-

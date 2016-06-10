@@ -352,30 +352,29 @@
 ;; else we just add the line to lines
 (define (hostsfile-read-line hf line [newsrc ""])
   (define-values (lines hosts tags srcs size) (hostsfile-values hf))
-  (cond [(hostsfile-is-proper-entry? line)
-         (hostsfile-lines-add lines line)
-         (define host (get-host line))
-         (define host-tags (get-host-tags line))
-         (make-hostsfile
-          lines
-          (hostsfile-hosts-add hosts host host-tags size)
-          (hostsfile-tags-add tags host host-tags)
-          srcs
-          (add1 size))]
-        [(hostsfile-is-entry? line)
-         (define sline (sanitize-line line newsrc))
-         (hostsfile-lines-add lines sline)
-         (define host (get-host sline))
-         (define host-tags (get-host-tags sline))
-         (make-hostsfile
-          lines
-          (hostsfile-hosts-add hosts host host-tags size)
-          (hostsfile-tags-add tags host host-tags)
-          srcs
-          (add1 size))]
-        [else
-         (hostsfile-lines-add lines line)
-         (make-hostsfile lines hosts tags srcs (add1 size))]))
+  (define-values (nhosts ntags nsize)
+    (let ([newsize (add1 size)])
+      (cond [(hostsfile-is-proper-entry? line)
+             (hostsfile-lines-add lines line)
+             (define host (get-host line))
+             (define host-tags (get-host-tags line))
+             (values
+              (hostsfile-hosts-add hosts host host-tags size)
+              (hostsfile-tags-add tags host host-tags)
+              newsize)]
+            [(hostsfile-is-entry? line)
+             (define sline (sanitize-line line newsrc))
+             (hostsfile-lines-add lines sline)
+             (define host (get-host line))
+             (define host-tags (get-host-tags line))
+             (values
+              (hostsfile-hosts-add hosts host host-tags size)
+              (hostsfile-tags-add tags host host-tags)
+              newsize)]
+            [else
+             (hostsfile-lines-add lines line)
+             (values hosts tags newsize)])))
+  (make-hostsfile lines nhosts ntags srcs size))
 
 
 ;; (hostsfile-read-sources hf in) -> hostsfile?
