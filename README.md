@@ -15,25 +15,6 @@ add it to your hostsfile using the following command:
 - `http://someonewhocares.org/hosts/hosts`
 - `http://adaway.org/hosts.txt`
 
-# TODO
-- `-u` updating from sources
-- `-v` print version
-- fetch default sources from github or something
-- `-a` add source from remote or local [x]
-- `-o` output to hostfile [x]
-- `-l` list sources in hostsfile (categorize by local or remote) [x]
-- `-t` list by tag / add tags hashtable [x]
-- `-r` remove source [x]
-- `-d` remove by tag [x]
-- `-et` enable tag (uncomment line)
-- `-dt` disable tag (comment line)
-- `-ee` enable entry/host
-- `-de` disable entry/host
-- how to deal with duplicate entries in terms of tags...
-- give sources nicknames to provide easier access
-- add optional default sources
-- clean up code and write documentation cause watching game of thrones and programming does not result in clean code
-
 ## redesign
 - be fast
 - be easy to use
