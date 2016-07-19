@@ -1,9 +1,9 @@
 #lang racket
 
-
-(require "hostsfile.rkt")
-
-(provide hostsfile-path)
+(require
+ "hostsfile.rkt"
+ "decorators.rkt"
+ )
 
 ;; prevent stacktrace on error messages -- comment-out when developing!
 (error-print-context-length 0)
@@ -20,31 +20,44 @@
   (if (logging) (displayln line) (void)))
 
 
+;; (decorate hf fns) -> hf
+;;   hf: hostsfile?
+;;   fns: (listof function)
+;;
+;; decorate and produce a hostsfile with a list of decorators
+;; that accept a hostsfile `hf`
 (define (decorate hf fns)
   (cond [(empty? fns) hf]
-        [else
-         (decorate ((first fns) hf) (rest fns))]))
+        [else (decorate ((first fns) hf) (rest fns))]))
+
+
+;; (initialize) -> void?
+;;
+;; initialize a file with hostblocker
+(define (initialize)
+  (define in (open-input-file (hostsfile-path)))
+  (define hf (hf-init in))
+  (close-input-port in)
+  (define out (open-output-file (hostsfile-out-path) #:exists 'replace))
+  (hf-write hf out)
+  (close-output-port out)
+  (void))
 
 
 (define (main)
   (define in (open-input-file (hostsfile-path)))
-  (define myhostsfile (hostsfile-parse in))
+  (define hf (parse in))
   (close-input-port in)
 
-  (define dec-hf (decorate myhostsfile (reverse (modifiers))))
+  (define decd-hf (decorate hf (reverse (modifiers))))
 
   (cond
     [(modify?)
-     (define hostsfile-out
-       (open-output-file (hostsfile-out-path) #:exists 'replace))
-     (hostsfile-write dec-hf hostsfile-out)
-     (close-output-port hostsfile-out)]
-    [(empty? (vector->list (current-command-line-arguments)))
-     (hostsfile-write myhostsfile (current-output-port))]
-    [else
-     (void)])
+     (define out (open-output-file (hostsfile-out-path) #:exists 'replace))
+     (hf-write decd-hf out)
+     (close-output-port out)]
+    [else (void)])
   (void))
-
 
 
 ;; define program parameters
@@ -65,6 +78,9 @@
 ;; modify?: tell program to write to (hostsfile-out-path)
 (define modify? (make-parameter #f))
 
+;; initialize?: tell program to initialize (hostfile-path)
+(define initialize? (make-parameter #f))
+
 ;; logging: enable logging or verbose output
 (define logging (make-parameter #t))
 
@@ -77,6 +93,16 @@
   (command-line
    #:program "hostblocker"
    #:once-each
+   [("-i" "--init") filename
+    "intialize <filename> with hostblocker"
+    (hostsfile-path filename)
+    (hostsfile-out-path filename)
+    (initialize? true)]
+   [("-d" "--defaults")
+    "add the entries from https://github.com/StevenBlack/hosts"
+    (modify? #t)
+    (define defaults-dec (λ (x) (defaults x)))
+    (modifiers (add-modifier defaults-dec (modifiers)))]
    [("-f" "--file") filename
     "specify hosts file to use: <filename>"
     (hostsfile-path filename)
@@ -84,43 +110,35 @@
    [("-v" "--verbose")
     "display logging info"
     (logging #t)]
+   [("-u" "--update")
+    "update sources in the hostsfile"
+    (modify? #t)
+    (define update-sources-dec (λ (x) (update-sources x)))
+    (modifiers (add-modifier update-sources-dec (modifiers)))]
    [("-o" "--out") filename
     "specify output hosts file: <filename>"
     (modify? #t)
     (hostsfile-out-path filename)]
    #:multi
    [("-l" "--list")
-    "list known sources in the hostfile specified"
+    "list known sources in the hostsfile specified"
     (define list-sources-dec
       (λ (x)
-        (hostsfile-list-sources
-         x (current-output-port) (hostsfile-path))))
+        (list-sources x (current-output-port))))
     (modifiers (add-modifier list-sources-dec (modifiers)))]
-   [("-t" "--tags")
-    "list all the tags in the hostfile specified"
-    (define list-tags-dec
-      (λ (x)
-        (hostsfile-list-tags x (current-output-port) (hostsfile-path))))
-    (modifiers (add-modifier list-tags-dec (modifiers)))]
-   [("-a" "--add-source") source
-    "add a local or remote source: <source>"
+   [("-a" "--add") source name
+    "add a local or remote source: <source> identified by <name>"
     (modify? #t)
     (define add-source-dec
-      (λ (x) (hostsfile-add-new x source)))
+      (λ (x) (add-source x source name)))
     (modifiers (add-modifier add-source-dec (modifiers)))]
-   [("-r" "--remove-source") source
-    "remove a local or remote source: <source>"
+   [("-r" "--remove") source
+    "remove a source: <source>"
     (modify? #t)
     (define remove-source-dec
-      (λ (x) (hostsfile-remove-source x source (hostsfile-path))))
+      (λ (x) (remove-source x source)))
     (modifiers (add-modifier remove-source-dec (modifiers)))]
-   [("-d" "--remove-by-tag") tag
-    "remove all entries with tag <tag>"
-    (modify? #t)
-    (define remove-by-tag-dec
-      (λ (x) (hostsfile-remove-by-tag x tag (hostsfile-path))))
-    (modifiers (add-modifier remove-by-tag-dec (modifiers)))]
 ))
 
 
-(main)
+(if (initialize?) (initialize) (main))

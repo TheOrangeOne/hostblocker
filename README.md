@@ -1,43 +1,46 @@
 # hostblocker
-block websites and ads efficiently and absolutely using hosts file
+use your hostsfile as a domain blocker to block ads, malware, porn, gambling, social and whatever other sites you wish to block!
 
-# adding a source
+# usage
 
-for example, let's block known facebook domains using the hostsfile provided by [blocklists](https://github.com/jmdugan/blocklists)
+initialize a specified hostsfile
 
-the hostsfile to block 'all' of facebook's domains is found at `https://github.com/jmdugan/blocklists/blob/master/corporations/facebook/all`
+```shell
+$ touch myhostsfile # create a new hostsfile
+$ racket hostblocker.rkt --init myhostsfile
+```
 
-add it to your hostsfile using the following command:
+add an awesome default source (unified hosts = ads+malware) from [StevenBlack's hosts project](https://github.com/StevenBlack/hosts) with `--defaults`
 
-```racket hostblocker.rkt -a https://github.com/jmdugan/blocklists/blob/master/corporations/facebook/all```
+```shell
+$ racket hostblocker.rkt --file myhostsfile --defaults
+$ racket hostblocker.rkt --file myhostsfile --list # view the added source
+```
 
-# good sources to --add
-- `http://someonewhocares.org/hosts/hosts`
-- `http://adaway.org/hosts.txt`
+or add whatever remote or local sources you wish with `--add`
 
-## redesign
-- be fast
-- be easy to use
-- don't mess with the existing hostsfile
-  - read hostsfile storing lines in before-list
-  - if cookie is read, read in hosts, tags etc
-  - if endcookie is read, continue storing line in after-list
-  - output before-list then output resulting data then output after-list
-- easily update hostsfile and add sources
-- commands
-  - `$ hb --update`
-  - `$ hb --add`
-  - `$ hb --block`
-  - `$ hb --unblock`
-  - `$ hb --block-by-tag`
-  - `$ hb --unblock-by-tag`
-  - `$ hb --delete`
-  - `$ hb --list`
-  - `$ hb --list-by-tag`
+```shell
+$ racket hostblocker.rkt --file myhostsfile --add http://adaway.org/hosts.txt adaway
+```
 
+# installation
 
-# testing
+hostblocker requires racket, and the build tool raco
 
-```$ racket tests.rkt```
+## from source
+```shell
+$ sudo pacman -S racket # install racket
+$ raco pkg install # install dependencies
+$ sudo make
+```
 
-no output is a good thing!
+# TODO
+
+- [x] `--add` add remote or local sources
+- [x] `--remove` remove hosts based on the source
+- [x] `--update` update all source
+- [x] `--defaults` provide good defaults for ads, social, porn and gambling
+- [ ] `--add-tag` add a tag to a host
+- [ ] `--enable-by-tag` enable all hosts with a tag
+- [ ] `--disable-by-tag` disable all hosts with a tag
+- [ ] add tests and documentation
